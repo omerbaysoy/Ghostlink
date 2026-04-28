@@ -1,0 +1,12 @@
+[Unit]
+Description=Ghostlink Identity Engine
+After=gl-system.service network-pre.target
+Before=gl-network.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/ghostlink/identity/engine.sh apply
+
+[Install]
+WantedBy=ghostlink.target

@@ -1,0 +1,17 @@
+# External projects are reference only — not part of distribution
+external/
+
+# Runtime state and secrets
+config/ghostlink.conf.local
+*.state
+*.key
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Build artifacts
+*.o
+*.ko
+*.mod

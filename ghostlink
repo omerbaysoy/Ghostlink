@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Ghostlink CLI entry point
+
+CONF="/etc/ghostlink/ghostlink.conf"
+REPO="/opt/ghostlink"
+
+source "$REPO/system/banner.sh" 2>/dev/null || true
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+    status)
+        bash "$REPO/identity/status.sh"
+        ;;
+    identity)
+        sub="${1:-}"; shift || true
+        case "$sub" in
+            rotate)     bash "$REPO/identity/rotate.sh"  gl-upstream random ;;
+            restore)    bash "$REPO/identity/restore.sh" gl-upstream ;;
+            list)       jq -r 'keys[]' /etc/ghostlink/device_profiles.json ;;
+            set)        bash "$REPO/identity/spoof.sh"   gl-upstream "$1" ;;
+            *)          bash "$REPO/identity/status.sh" ;;
+        esac
+        ;;
+    scan)
+        "$REPO/venv/bin/python3" "$REPO/pentest/scan.py" "$@"
+        ;;
+    pentest)
+        sub="${1:-}"; shift || true
+        case "$sub" in
+            start)  "$REPO/venv/bin/python3" "$REPO/pentest/engine.py" start "$@" ;;
+            stop)   "$REPO/venv/bin/python3" "$REPO/pentest/engine.py" stop ;;
+            report) cat "$(ls -t /var/log/ghostlink/reports/*.md 2>/dev/null | head -1)" ;;
+            *)      echo "Usage: ghostlink pentest {start|stop|report}" ;;
+        esac
+        ;;
+    hotspot)
+        case "${1:-}" in
+            on)  systemctl start  hostapd dnsmasq ;;
+            off) systemctl stop   hostapd dnsmasq ;;
+            *)   systemctl status hostapd --no-pager ;;
+        esac
+        ;;
+    dashboard)
+        ip="$(hostname -I | awk '{print $1}')"
+        echo "Dashboard: https://${ip}:8080"
+        ;;
+    update-tools)
+        bash "$REPO/install/steps/07_tools.sh" "$REPO"
+        ;;
+    doctor)
+        for iface in gl-mgmt gl-upstream gl-hotspot; do
+            state=$(cat /sys/class/net/"$iface"/operstate 2>/dev/null || echo "missing")
+            echo "  $iface : $state"
+        done
+        systemctl is-active ghostlink.target --no-pager || true
+        ;;
+    logs)
+        journalctl -u 'gl-*' -f --no-pager
+        ;;
+    ""|--help|-h)
+        echo "Usage: ghostlink <command>"
+        echo ""
+        echo "  status                  System overview"
+        echo "  identity [rotate|restore|list|set <profile>]"
+        echo "  scan                    Scan surrounding networks"
+        echo "  pentest [start|stop|report]"
+        echo "  hotspot [on|off]        Control distribution AP"
+        echo "  dashboard               Print dashboard URL"
+        echo "  update-tools            Update all pentest tools"
+        echo "  doctor                  Diagnose interface/service issues"
+        echo "  logs                    Live system log stream"
+        ;;
+    *)
+        echo "Unknown command: $cmd  (run 'ghostlink --help')"
+        exit 1
+        ;;
+esac

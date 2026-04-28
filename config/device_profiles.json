@@ -1,0 +1,250 @@
+{
+  "apple_iphone_14": {
+    "vendor": "Apple", "model": "iPhone 14",
+    "oui": "A4:C3:F0", "hostname": "iPhone", "dhcp_vendor": "MSFT 5.0"
+  },
+  "apple_iphone_15_pro": {
+    "vendor": "Apple", "model": "iPhone 15 Pro",
+    "oui": "DC:A4:CA", "hostname": "iPhone-Pro", "dhcp_vendor": "MSFT 5.0"
+  },
+  "apple_iphone_13": {
+    "vendor": "Apple", "model": "iPhone 13",
+    "oui": "3C:22:FB", "hostname": "iPhone-13", "dhcp_vendor": "MSFT 5.0"
+  },
+  "apple_iphone_se": {
+    "vendor": "Apple", "model": "iPhone SE",
+    "oui": "28:37:37", "hostname": "iPhoneSE", "dhcp_vendor": "MSFT 5.0"
+  },
+  "apple_macbook_pro_m2": {
+    "vendor": "Apple", "model": "MacBook Pro M2",
+    "oui": "04:52:C7", "hostname": "MacBook-Pro", "dhcp_vendor": ""
+  },
+  "apple_macbook_air_m1": {
+    "vendor": "Apple", "model": "MacBook Air M1",
+    "oui": "38:F9:D3", "hostname": "MacBook-Air", "dhcp_vendor": ""
+  },
+  "apple_ipad_pro": {
+    "vendor": "Apple", "model": "iPad Pro 12.9",
+    "oui": "AC:BC:32", "hostname": "iPad-Pro", "dhcp_vendor": "MSFT 5.0"
+  },
+  "apple_ipad_air": {
+    "vendor": "Apple", "model": "iPad Air",
+    "oui": "8C:85:90", "hostname": "iPad-Air", "dhcp_vendor": "MSFT 5.0"
+  },
+  "apple_watch_s8": {
+    "vendor": "Apple", "model": "Apple Watch Series 8",
+    "oui": "F0:B4:79", "hostname": "Apple-Watch", "dhcp_vendor": "MSFT 5.0"
+  },
+  "apple_tv_4k": {
+    "vendor": "Apple", "model": "Apple TV 4K",
+    "oui": "A8:BB:CF", "hostname": "AppleTV", "dhcp_vendor": ""
+  },
+  "samsung_galaxy_s23": {
+    "vendor": "Samsung", "model": "Galaxy S23 Ultra",
+    "oui": "70:F9:27", "hostname": "Galaxy-S23", "dhcp_vendor": ""
+  },
+  "samsung_galaxy_s22": {
+    "vendor": "Samsung", "model": "Galaxy S22",
+    "oui": "78:52:1A", "hostname": "Galaxy-S22", "dhcp_vendor": ""
+  },
+  "samsung_galaxy_a54": {
+    "vendor": "Samsung", "model": "Galaxy A54",
+    "oui": "CC:07:AB", "hostname": "Galaxy-A54", "dhcp_vendor": ""
+  },
+  "samsung_galaxy_tab_s8": {
+    "vendor": "Samsung", "model": "Galaxy Tab S8",
+    "oui": "A0:82:1F", "hostname": "Galaxy-Tab", "dhcp_vendor": ""
+  },
+  "samsung_galaxy_a14": {
+    "vendor": "Samsung", "model": "Galaxy A14",
+    "oui": "40:B8:37", "hostname": "Galaxy-A14", "dhcp_vendor": ""
+  },
+  "samsung_galaxy_fold4": {
+    "vendor": "Samsung", "model": "Galaxy Z Fold4",
+    "oui": "8C:71:F8", "hostname": "Galaxy-Fold", "dhcp_vendor": ""
+  },
+  "samsung_galaxy_s21": {
+    "vendor": "Samsung", "model": "Galaxy S21 FE",
+    "oui": "B0:72:BF", "hostname": "Galaxy-S21", "dhcp_vendor": ""
+  },
+  "xiaomi_redmi_note12": {
+    "vendor": "Xiaomi", "model": "Redmi Note 12 Pro",
+    "oui": "64:B4:73", "hostname": "Redmi-Note12", "dhcp_vendor": ""
+  },
+  "xiaomi_mi_13": {
+    "vendor": "Xiaomi", "model": "Xiaomi 13",
+    "oui": "AC:C1:EE", "hostname": "Xiaomi-13", "dhcp_vendor": ""
+  },
+  "xiaomi_poco_x5": {
+    "vendor": "Xiaomi", "model": "POCO X5 Pro",
+    "oui": "F4:8B:32", "hostname": "POCO-X5", "dhcp_vendor": ""
+  },
+  "xiaomi_redmi_10": {
+    "vendor": "Xiaomi", "model": "Redmi 10",
+    "oui": "58:44:98", "hostname": "Redmi-10", "dhcp_vendor": ""
+  },
+  "xiaomi_mi_pad5": {
+    "vendor": "Xiaomi", "model": "Mi Pad 5",
+    "oui": "14:4F:8A", "hostname": "MiPad-5", "dhcp_vendor": ""
+  },
+  "google_pixel_7": {
+    "vendor": "Google", "model": "Pixel 7 Pro",
+    "oui": "F4:F5:D8", "hostname": "Pixel-7-Pro", "dhcp_vendor": ""
+  },
+  "google_pixel_6a": {
+    "vendor": "Google", "model": "Pixel 6a",
+    "oui": "60:F1:89", "hostname": "Pixel-6a", "dhcp_vendor": ""
+  },
+  "google_pixel_8": {
+    "vendor": "Google", "model": "Pixel 8",
+    "oui": "3C:5A:B4", "hostname": "Pixel-8", "dhcp_vendor": ""
+  },
+  "google_nest_hub": {
+    "vendor": "Google", "model": "Nest Hub 2nd Gen",
+    "oui": "48:D6:D5", "hostname": "Nest-Hub", "dhcp_vendor": ""
+  },
+  "huawei_p40_pro": {
+    "vendor": "Huawei", "model": "P40 Pro",
+    "oui": "70:72:3C", "hostname": "HUAWEI-P40", "dhcp_vendor": ""
+  },
+  "huawei_mate50": {
+    "vendor": "Huawei", "model": "Mate 50 Pro",
+    "oui": "C4:9D:ED", "hostname": "HUAWEI-Mate50", "dhcp_vendor": ""
+  },
+  "huawei_nova10": {
+    "vendor": "Huawei", "model": "Nova 10 Pro",
+    "oui": "28:31:52", "hostname": "HUAWEI-nova10", "dhcp_vendor": ""
+  },
+  "huawei_matepad": {
+    "vendor": "Huawei", "model": "MatePad Pro",
+    "oui": "AC:E2:D3", "hostname": "HUAWEI-MatePad", "dhcp_vendor": ""
+  },
+  "oneplus_10_pro": {
+    "vendor": "OnePlus", "model": "10 Pro 5G",
+    "oui": "3C:CB:7C", "hostname": "OnePlus-10-Pro", "dhcp_vendor": ""
+  },
+  "oneplus_nord_ce3": {
+    "vendor": "OnePlus", "model": "Nord CE3 Lite",
+    "oui": "AC:BC:AC", "hostname": "OnePlus-Nord", "dhcp_vendor": ""
+  },
+  "sony_xperia_1v": {
+    "vendor": "Sony", "model": "Xperia 1 V",
+    "oui": "FC:0F:E6", "hostname": "Xperia-1-V", "dhcp_vendor": ""
+  },
+  "sony_xperia_10v": {
+    "vendor": "Sony", "model": "Xperia 10 V",
+    "oui": "00:13:A9", "hostname": "Xperia-10", "dhcp_vendor": ""
+  },
+  "sony_playstation5": {
+    "vendor": "Sony", "model": "PlayStation 5",
+    "oui": "40:2D:A8", "hostname": "PS5", "dhcp_vendor": ""
+  },
+  "nintendo_switch_oled": {
+    "vendor": "Nintendo", "model": "Switch OLED",
+    "oui": "98:B6:E9", "hostname": "Nintendo-Switch", "dhcp_vendor": ""
+  },
+  "nintendo_switch_lite": {
+    "vendor": "Nintendo", "model": "Switch Lite",
+    "oui": "00:09:BF", "hostname": "Nintendo-Lite", "dhcp_vendor": ""
+  },
+  "dell_xps_15": {
+    "vendor": "Dell", "model": "XPS 15 9530",
+    "oui": "18:DB:F2", "hostname": "DESKTOP-XPS15", "dhcp_vendor": ""
+  },
+  "dell_latitude_5540": {
+    "vendor": "Dell", "model": "Latitude 5540",
+    "oui": "D4:BE:D9", "hostname": "DESKTOP-LAT55", "dhcp_vendor": ""
+  },
+  "dell_inspiron_16": {
+    "vendor": "Dell", "model": "Inspiron 16",
+    "oui": "00:1A:A0", "hostname": "DESKTOP-INS16", "dhcp_vendor": ""
+  },
+  "hp_elitebook_840": {
+    "vendor": "HP", "model": "EliteBook 840 G10",
+    "oui": "70:4D:7B", "hostname": "HP-EliteBook840", "dhcp_vendor": ""
+  },
+  "hp_probook_450": {
+    "vendor": "HP", "model": "ProBook 450 G10",
+    "oui": "3C:D9:2B", "hostname": "HP-ProBook450", "dhcp_vendor": ""
+  },
+  "hp_envy_laptop": {
+    "vendor": "HP", "model": "ENVY x360",
+    "oui": "00:1A:4B", "hostname": "HP-ENVY-x360", "dhcp_vendor": ""
+  },
+  "lenovo_thinkpad_x1": {
+    "vendor": "Lenovo", "model": "ThinkPad X1 Carbon",
+    "oui": "00:24:BE", "hostname": "THINKPAD-X1", "dhcp_vendor": ""
+  },
+  "lenovo_ideapad_5": {
+    "vendor": "Lenovo", "model": "IdeaPad 5 Pro",
+    "oui": "54:EE:75", "hostname": "IDEAPAD-5", "dhcp_vendor": ""
+  },
+  "lenovo_thinkpad_t14": {
+    "vendor": "Lenovo", "model": "ThinkPad T14s Gen 4",
+    "oui": "8C:EC:4B", "hostname": "THINKPAD-T14", "dhcp_vendor": ""
+  },
+  "asus_zenbook_14": {
+    "vendor": "ASUS", "model": "ZenBook 14 OLED",
+    "oui": "A0:8C:FD", "hostname": "ASUS-ZenBook", "dhcp_vendor": ""
+  },
+  "asus_vivobook_16": {
+    "vendor": "ASUS", "model": "VivoBook 16X",
+    "oui": "BC:AE:C5", "hostname": "ASUS-VivoBook", "dhcp_vendor": ""
+  },
+  "asus_rog_phone6": {
+    "vendor": "ASUS", "model": "ROG Phone 6",
+    "oui": "04:D4:C4", "hostname": "ASUS-ROG6", "dhcp_vendor": ""
+  },
+  "amazon_echo_dot5": {
+    "vendor": "Amazon", "model": "Echo Dot 5th Gen",
+    "oui": "FC:A6:67", "hostname": "Amazon-Echo", "dhcp_vendor": ""
+  },
+  "amazon_fire_hd10": {
+    "vendor": "Amazon", "model": "Fire HD 10",
+    "oui": "F0:D2:F1", "hostname": "Amazon-FireHD", "dhcp_vendor": ""
+  },
+  "amazon_fire_tv": {
+    "vendor": "Amazon", "model": "Fire TV Stick 4K",
+    "oui": "44:65:0D", "hostname": "Amazon-FireTV", "dhcp_vendor": ""
+  },
+  "lg_velvet_5g": {
+    "vendor": "LG", "model": "Velvet 5G",
+    "oui": "A8:92:3C", "hostname": "LGE-LG-V600", "dhcp_vendor": ""
+  },
+  "motorola_edge40": {
+    "vendor": "Motorola", "model": "Edge 40 Pro",
+    "oui": "AC:37:43", "hostname": "motorola-edge40", "dhcp_vendor": ""
+  },
+  "motorola_moto_g84": {
+    "vendor": "Motorola", "model": "Moto G84",
+    "oui": "00:17:E9", "hostname": "motorola-g84", "dhcp_vendor": ""
+  },
+  "microsoft_surface_pro9": {
+    "vendor": "Microsoft", "model": "Surface Pro 9",
+    "oui": "7C:ED:8D", "hostname": "SURFACE-PRO9", "dhcp_vendor": ""
+  },
+  "microsoft_xbox_series_x": {
+    "vendor": "Microsoft", "model": "Xbox Series X",
+    "oui": "28:16:A8", "hostname": "Xbox-SeriesX", "dhcp_vendor": ""
+  },
+  "razer_blade_16": {
+    "vendor": "Razer", "model": "Blade 16",
+    "oui": "14:13:33", "hostname": "Razer-Blade16", "dhcp_vendor": ""
+  },
+  "oppo_reno10": {
+    "vendor": "OPPO", "model": "Reno10 Pro+",
+    "oui": "D4:61:2E", "hostname": "OPPO-Reno10", "dhcp_vendor": ""
+  },
+  "vivo_x90_pro": {
+    "vendor": "vivo", "model": "X90 Pro+",
+    "oui": "78:BD:BC", "hostname": "vivo-X90Pro", "dhcp_vendor": ""
+  },
+  "realme_gt5": {
+    "vendor": "realme", "model": "GT5 Pro",
+    "oui": "00:E0:E4", "hostname": "realme-GT5", "dhcp_vendor": ""
+  },
+  "nothing_phone2": {
+    "vendor": "Nothing", "model": "Phone (2)",
+    "oui": "74:29:AF", "hostname": "Nothing-Phone2", "dhcp_vendor": ""
+  }
+}

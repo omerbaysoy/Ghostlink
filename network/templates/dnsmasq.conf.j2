@@ -1,0 +1,9 @@
+interface=${HOTSPOT_IFACE}
+bind-interfaces
+dhcp-range=192.168.50.10,192.168.50.200,255.255.255.0,24h
+dhcp-option=3,192.168.50.1
+dhcp-option=6,1.1.1.1,8.8.8.8
+domain=ghostlink.local
+local=/ghostlink.local/
+address=/ghostlink.local/192.168.50.1
+log-dhcp

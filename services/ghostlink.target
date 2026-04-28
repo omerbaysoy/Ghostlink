@@ -1,0 +1,7 @@
+[Unit]
+Description=Ghostlink Platform
+Wants=gl-system.service gl-network.service gl-identity.service gl-dashboard.service gl-fan.service
+After=network.target
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=Ghostlink System Optimization
+After=local-fs.target
+Before=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/ghostlink/system/ssd.sh apply
+ExecStart=/opt/ghostlink/system/zram.sh apply
+
+[Install]
+WantedBy=ghostlink.target

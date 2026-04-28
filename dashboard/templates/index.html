@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ghostlink</title>
+<link rel="stylesheet" href="/static/pico.min.css">
+<link rel="stylesheet" href="/static/xterm.css">
+<style>
+  :root { --color-accent: #00ff88; }
+  body { font-family: 'Courier New', monospace; background: #0a0a0f; }
+  nav.top-nav {
+    display: flex; align-items: center; gap: 1rem;
+    padding: 0.6rem 1.5rem; background: #111118; border-bottom: 1px solid #222;
+  }
+  .ghost-logo { font-size: 1.4rem; color: var(--color-accent); letter-spacing: 2px; }
+  .ghost-logo span { color: #fff; }
+  nav.top-nav a {
+    color: #aaa; text-decoration: none; font-size: 0.85rem;
+    padding: 0.3rem 0.8rem; border-radius: 4px;
+  }
+  nav.top-nav a:hover, nav.top-nav a.active { color: var(--color-accent); background: #1a1a22; }
+  .panel { display: none; padding: 1rem 1.5rem; }
+  .panel.active { display: block; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+  .card {
+    background: #111118; border: 1px solid #222; border-radius: 8px;
+    padding: 1rem;
+  }
+  .card h3 { margin: 0 0 0.8rem; color: var(--color-accent); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-row { display: flex; justify-content: space-between; margin: 0.3rem 0; font-size: 0.85rem; }
+  .stat-val { color: var(--color-accent); font-weight: bold; }
+  .iface-row {
+    display: flex; align-items: center; gap: 0.7rem;
+    padding: 0.5rem 0; border-bottom: 1px solid #1a1a22; font-size: 0.85rem;
+  }
+  .iface-row:last-child { border: none; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot.up { background: var(--color-accent); }
+  .dot.down { background: #444; }
+  .dot.missing { background: #333; }
+  .iface-name { color: #fff; font-weight: bold; min-width: 100px; }
+  .iface-mac { color: #666; font-size: 0.78rem; }
+  .iface-addr { color: #88aaff; font-size: 0.82rem; margin-left: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  th { color: #666; font-weight: normal; text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid #1a1a22; }
+  td { padding: 0.4rem 0.5rem; color: #ccc; }
+  tr:hover td { background: #1a1a22; }
+  .badge {
+    display: inline-block; font-size: 0.72rem; padding: 0.1rem 0.5rem;
+    border-radius: 3px; font-weight: bold;
+  }
+  .badge.wpa2 { background: #1a3320; color: #00ff88; }
+  .badge.wpa3 { background: #1a2433; color: #4488ff; }
+  .badge.wep  { background: #331a1a; color: #ff4444; }
+  .badge.opn  { background: #2a1a00; color: #ffaa00; }
+  .progress {
+    background: #1a1a22; border-radius: 4px; height: 6px; overflow: hidden; margin-top: 0.3rem;
+  }
+  .progress-bar { height: 100%; background: var(--color-accent); border-radius: 4px; transition: width 0.5s; }
+  .progress-bar.warn { background: #ffaa00; }
+  .progress-bar.danger { background: #ff4444; }
+  button.gl {
+    background: transparent; border: 1px solid var(--color-accent); color: var(--color-accent);
+    padding: 0.4rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;
+    transition: all 0.2s;
+  }
+  button.gl:hover { background: var(--color-accent); color: #000; }
+  button.gl.danger { border-color: #ff4444; color: #ff4444; }
+  button.gl.danger:hover { background: #ff4444; color: #fff; }
+  button.gl:disabled { opacity: 0.4; cursor: not-allowed; }
+  select.gl, input.gl {
+    background: #0a0a0f; border: 1px solid #333; color: #ccc;
+    padding: 0.4rem 0.7rem; border-radius: 4px; font-size: 0.85rem;
+  }
+  #terminal-container {
+    height: calc(100vh - 130px);
+    background: #0a0a0f; border-radius: 8px; overflow: hidden;
+    border: 1px solid #222; padding: 8px;
+  }
+  #terminal { width: 100%; height: 100%; }
+  .pentest-log {
+    background: #070710; border: 1px solid #1a1a22; border-radius: 4px;
+    height: 280px; overflow-y: auto; padding: 0.7rem;
+    font-size: 0.8rem; color: #aaa; font-family: monospace;
+  }
+  .pentest-log .ts { color: #444; }
+  .pentest-log .info { color: #aaa; }
+  .pentest-log .success { color: #00ff88; }
+  .pentest-log .warn { color: #ffaa00; }
+  .pentest-log .error { color: #ff4444; }
+  .identity-card { display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.85rem; }
+  .identity-card .field { display: flex; gap: 0.5rem; }
+  .identity-card .label { color: #666; min-width: 80px; }
+  .identity-card .value { color: #ccc; }
+  .identity-card .value.accent { color: var(--color-accent); }
+  .report-preview {
+    background: #070710; border: 1px solid #1a1a22; border-radius: 4px;
+    padding: 1rem; height: 300px; overflow-y: auto;
+    font-size: 0.82rem; color: #aaa; white-space: pre-wrap; font-family: monospace;
+  }
+  #status-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: #070710; border-top: 1px solid #1a1a22;
+    padding: 0.25rem 1.5rem; font-size: 0.75rem; color: #555;
+    display: flex; gap: 2rem;
+  }
+  #status-bar span { color: #888; }
+  #status-bar .ok { color: var(--color-accent); }
+</style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <div class="ghost-logo">👻 <span>GHOSTLINK</span></div>
+  <a href="#" class="active" onclick="showPanel('overview')">Overview</a>
+  <a href="#" onclick="showPanel('network')">Network</a>
+  <a href="#" onclick="showPanel('identity')">Identity</a>
+  <a href="#" onclick="showPanel('pentest')">Pentest</a>
+  <a href="#" onclick="showPanel('terminal')">Terminal</a>
+</nav>
+
+<!-- OVERVIEW -->
+<div id="panel-overview" class="panel active">
+  <div class="grid-3" style="margin-bottom:1rem">
+    <div class="card">
+      <h3>CPU</h3>
+      <div class="stat-row"><span>Usage</span><span class="stat-val" id="cpu-pct">--%</span></div>
+      <div class="progress"><div class="progress-bar" id="cpu-bar" style="width:0%"></div></div>
+      <div class="stat-row" style="margin-top:0.5rem"><span>Temperature</span><span class="stat-val" id="cpu-temp">--°C</span></div>
+    </div>
+    <div class="card">
+      <h3>Memory</h3>
+      <div class="stat-row"><span>Used</span><span class="stat-val" id="mem-used">-- MB</span></div>
+      <div class="progress"><div class="progress-bar" id="mem-bar" style="width:0%"></div></div>
+      <div class="stat-row" style="margin-top:0.5rem"><span>Total</span><span class="stat-val" id="mem-total">-- MB</span></div>
+    </div>
+    <div class="card">
+      <h3>Storage</h3>
+      <div class="stat-row"><span>Used</span><span class="stat-val" id="disk-used">-- GB</span></div>
+      <div class="progress"><div class="progress-bar" id="disk-bar" style="width:0%"></div></div>
+      <div class="stat-row" style="margin-top:0.5rem"><span>Total</span><span class="stat-val" id="disk-total">-- GB</span></div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Interfaces</h3>
+      <div id="iface-list"><div style="color:#555;font-size:0.85rem">Loading...</div></div>
+    </div>
+    <div class="card">
+      <h3>Identity</h3>
+      <div id="overview-identity" class="identity-card">
+        <div style="color:#555;font-size:0.85rem">Loading...</div>
+      </div>
+      <div style="margin-top:0.8rem;display:flex;gap:0.5rem">
+        <button class="gl" onclick="rotateIdentity()">Rotate</button>
+        <button class="gl danger" onclick="restoreIdentity()">Restore Real</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- NETWORK -->
+<div id="panel-network" class="panel">
+  <div class="grid-2" style="margin-bottom:1rem">
+    <div class="card">
+      <h3>Interface Status</h3>
+      <div id="net-iface-list"><div style="color:#555;font-size:0.85rem">Loading...</div></div>
+    </div>
+    <div class="card">
+      <h3>Hotspot Control</h3>
+      <div style="display:flex;gap:0.7rem;margin-bottom:0.8rem">
+        <button class="gl" onclick="hotspot('on')">Start AP</button>
+        <button class="gl danger" onclick="hotspot('off')">Stop AP</button>
+      </div>
+      <div id="hotspot-status" style="font-size:0.85rem;color:#666">--</div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>
+      WiFi Scan
+      <button class="gl" style="float:right;font-size:0.8rem" onclick="runScan()">Scan Now</button>
+    </h3>
+    <div id="scan-results" style="margin-top:0.5rem">
+      <div style="color:#555;font-size:0.85rem">Press "Scan Now" to discover nearby networks</div>
+    </div>
+  </div>
+</div>
+
+<!-- IDENTITY -->
+<div id="panel-identity" class="panel">
+  <div class="grid-2">
+    <div class="card">
+      <h3>Current Identity</h3>
+      <div id="identity-detail" class="identity-card">
+        <div style="color:#555;font-size:0.85rem">Loading...</div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Change Identity</h3>
+      <div style="display:flex;flex-direction:column;gap:0.7rem">
+        <div>
+          <label style="font-size:0.82rem;color:#666">Profile</label>
+          <select id="profile-select" class="gl" style="width:100%;margin-top:0.3rem">
+            <option value="random">random</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:0.82rem;color:#666">Interface</label>
+          <select id="iface-select" class="gl" style="width:100%;margin-top:0.3rem">
+            <option value="gl-upstream">gl-upstream</option>
+            <option value="gl-mgmt">gl-mgmt</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:0.7rem">
+          <button class="gl" onclick="applyIdentity()">Apply Profile</button>
+          <button class="gl danger" onclick="restoreIdentity()">Restore Factory</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:1rem">
+    <h3>Profile Library</h3>
+    <div id="profile-list" style="color:#555;font-size:0.85rem">Loading...</div>
+  </div>
+</div>
+
+<!-- PENTEST -->
+<div id="panel-pentest" class="panel">
+  <div class="grid-2" style="margin-bottom:1rem">
+    <div class="card">
+      <h3>Engine Control</h3>
+      <div style="margin-bottom:0.8rem">
+        <div class="stat-row">
+          <span>Status</span>
+          <span class="stat-val" id="pentest-status">IDLE</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:0.7rem;margin-bottom:0.8rem">
+        <button class="gl" id="btn-start" onclick="startPentest()">Start</button>
+        <button class="gl danger" id="btn-stop" onclick="stopPentest()">Stop</button>
+      </div>
+      <div>
+        <label style="font-size:0.82rem;color:#666">Target (optional BSSID/SSID)</label>
+        <input id="pentest-target" class="gl" type="text" placeholder="leave empty to scan all" style="width:100%;margin-top:0.3rem">
+      </div>
+    </div>
+    <div class="card">
+      <h3>Latest Report</h3>
+      <div id="report-meta" style="font-size:0.82rem;color:#666;margin-bottom:0.5rem">No reports yet</div>
+      <button class="gl" onclick="loadReport()">Load Latest</button>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Engine Log</h3>
+    <div id="pentest-log" class="pentest-log"></div>
+  </div>
+  <div class="card" style="margin-top:1rem">
+    <h3>Report Preview</h3>
+    <div id="report-preview" class="report-preview">No report loaded</div>
+  </div>
+</div>
+
+<!-- TERMINAL -->
+<div id="panel-terminal" class="panel" style="padding:0.5rem 1rem">
+  <div id="terminal-container">
+    <div id="terminal"></div>
+  </div>
+</div>
+
+<div id="status-bar">
+  <span>Ghostlink</span>
+  <span id="sb-cpu">CPU: --</span>
+  <span id="sb-temp">Temp: --</span>
+  <span id="sb-mem">Mem: --</span>
+  <span id="sb-iface"></span>
+</div>
+
+<script src="/static/xterm.js"></script>
+<script src="/static/xterm-addon-fit.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+
+// ── Panel navigation ─────────────────────────────────────────────────────────
+function showPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav.top-nav a').forEach(a => a.classList.remove('active'));
+  $(`panel-${name}`).classList.add('active');
+  event.currentTarget.classList.add('active');
+  if (name === 'terminal') initTerminal();
+}
+
+// ── System stats ─────────────────────────────────────────────────────────────
+async function refreshStats() {
+  try {
+    const d = await fetch('/api/system/stats').then(r => r.json());
+    const cpu = d.cpu_percent || 0;
+    const cpuBar = $('cpu-bar');
+    $('cpu-pct').textContent = cpu.toFixed(0) + '%';
+    cpuBar.style.width = cpu + '%';
+    cpuBar.className = 'progress-bar' + (cpu > 80 ? ' danger' : cpu > 60 ? ' warn' : '');
+    $('cpu-temp').textContent = d.cpu_temp_c !== null ? d.cpu_temp_c + '°C' : 'N/A';
+
+    const memPct = d.mem_percent || 0;
+    const memBar = $('mem-bar');
+    $('mem-used').textContent = d.mem_used_mb + ' MB';
+    $('mem-total').textContent = d.mem_total_mb + ' MB';
+    memBar.style.width = memPct + '%';
+    memBar.className = 'progress-bar' + (memPct > 85 ? ' danger' : memPct > 70 ? ' warn' : '');
+
+    const diskPct = d.disk_percent || 0;
+    $('disk-used').textContent = d.disk_used_gb + ' GB';
+    $('disk-total').textContent = d.disk_total_gb + ' GB';
+    $('disk-bar').style.width = diskPct + '%';
+
+    $('sb-cpu').textContent = `CPU: ${cpu.toFixed(0)}%`;
+    $('sb-temp').textContent = d.cpu_temp_c !== null ? `Temp: ${d.cpu_temp_c}°C` : '';
+    $('sb-mem').textContent = `Mem: ${d.mem_used_mb}/${d.mem_total_mb}MB`;
+  } catch(e) {}
+}
+
+// ── Interfaces ────────────────────────────────────────────────────────────────
+function renderIfaces(ifaces, containerId) {
+  const el = $(containerId);
+  if (!el) return;
+  el.innerHTML = ifaces.map(i => `
+    <div class="iface-row">
+      <div class="dot ${i.state}"></div>
+      <div class="iface-name">${i.name}</div>
+      <div class="iface-mac">${i.mac || ''}</div>
+      <div class="iface-addr">${i.address || i.state}</div>
+    </div>`).join('');
+
+  const sb = $('sb-iface');
+  if (sb) sb.textContent = ifaces.map(i =>
+    `${i.name}: ${i.state === 'up' ? (i.address || 'up') : 'down'}`).join(' │ ');
+}
+
+async function refreshIfaces() {
+  try {
+    const ifaces = await fetch('/api/network/interfaces').then(r => r.json());
+    renderIfaces(ifaces, 'iface-list');
+    renderIfaces(ifaces, 'net-iface-list');
+  } catch(e) {}
+}
+
+// ── Identity ──────────────────────────────────────────────────────────────────
+function renderIdentity(state, containerId) {
+  const el = $(containerId);
+  if (!el) return;
+  if (!state || !state.PROFILE) {
+    el.innerHTML = '<div style="color:#555;font-size:0.85rem">No active spoof (factory MACs)</div>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="field"><span class="label">Profile</span><span class="value accent">${state.PROFILE}</span></div>
+    <div class="field"><span class="label">Vendor</span><span class="value">${state.VENDOR} ${state.MODEL}</span></div>
+    <div class="field"><span class="label">MAC</span><span class="value accent">${state.MAC}</span></div>
+    <div class="field"><span class="label">Interface</span><span class="value">${state.IFACE}</span></div>
+    <div class="field"><span class="label">Applied</span><span class="value">${state.APPLIED_AT || ''}</span></div>`;
+}
+
+async function refreshIdentity() {
+  try {
+    const state = await fetch('/api/identity/status').then(r => r.json());
+    renderIdentity(state, 'overview-identity');
+    renderIdentity(state, 'identity-detail');
+  } catch(e) {}
+}
+
+async function loadProfiles() {
+  try {
+    const profiles = await fetch('/api/identity/profiles').then(r => r.json());
+    const sel = $('profile-select');
+    sel.innerHTML = '<option value="random">random</option>' +
+      profiles.map(p => `<option value="${p}">${p}</option>`).join('');
+
+    const list = $('profile-list');
+    if (list) {
+      list.innerHTML = '<table><thead><tr><th>Profile</th></tr></thead><tbody>' +
+        profiles.map(p => `<tr><td>${p}</td></tr>`).join('') + '</tbody></table>';
+    }
+  } catch(e) {}
+}
+
+async function rotateIdentity() {
+  await fetch('/api/identity/rotate', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({profile:'random', interface:'gl-upstream'})});
+  refreshIdentity();
+}
+
+async function applyIdentity() {
+  const profile = $('profile-select').value;
+  const iface = $('iface-select').value;
+  await fetch('/api/identity/rotate', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({profile, interface: iface})});
+  refreshIdentity();
+}
+
+async function restoreIdentity() {
+  await fetch('/api/identity/restore', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({interface:'gl-upstream'})});
+  refreshIdentity();
+}
+
+// ── Network scan ──────────────────────────────────────────────────────────────
+const ENC_CLASS = enc => {
+  const e = (enc||'').toUpperCase();
+  if (e.includes('WPA3')) return 'wpa3';
+  if (e.includes('WPA')) return 'wpa2';
+  if (e.includes('WEP')) return 'wep';
+  return 'opn';
+};
+
+async function runScan() {
+  const el = $('scan-results');
+  el.innerHTML = '<div style="color:#555">Scanning (15s)...</div>';
+  try {
+    const nets = await fetch('/api/network/scan?duration=15').then(r => r.json());
+    if (!Array.isArray(nets) || nets.length === 0) {
+      el.innerHTML = '<div style="color:#555">No networks found</div>';
+      return;
+    }
+    el.innerHTML = `<table>
+      <thead><tr><th>BSSID</th><th>SSID</th><th>CH</th><th>Signal</th><th>Encryption</th></tr></thead>
+      <tbody>${nets.map(n => `<tr>
+        <td>${n.bssid||''}</td>
+        <td>${n.ssid||'[hidden]'}</td>
+        <td>${n.channel||''}</td>
+        <td>${n.signal||''} dBm</td>
+        <td><span class="badge ${ENC_CLASS(n.encryption)}">${n.encryption||'?'}</span></td>
+      </tr>`).join('')}</tbody></table>`;
+  } catch(e) {
+    el.innerHTML = '<div style="color:#ff4444">Scan failed</div>';
+  }
+}
+
+async function hotspot(action) {
+  await fetch('/api/network/hotspot', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({action})});
+  $('hotspot-status').textContent = `Hotspot ${action === 'on' ? 'started' : 'stopped'}`;
+}
+
+// ── Pentest ───────────────────────────────────────────────────────────────────
+function pentestLog(msg, cls='info') {
+  const log = $('pentest-log');
+  const ts = new Date().toLocaleTimeString();
+  log.innerHTML += `<div><span class="ts">[${ts}]</span> <span class="${cls}">${msg}</span></div>`;
+  log.scrollTop = log.scrollHeight;
+}
+
+async function refreshPentestStatus() {
+  try {
+    const s = await fetch('/api/pentest/status').then(r => r.json());
+    $('pentest-status').textContent = (s.status||'idle').toUpperCase();
+  } catch(e) {}
+}
+
+async function startPentest() {
+  const target = $('pentest-target').value;
+  pentestLog('Starting pentest engine...', 'info');
+  try {
+    await fetch('/api/pentest/start', {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({target, interface:'gl-upstream'})});
+    pentestLog('Engine started', 'success');
+  } catch(e) {
+    pentestLog('Failed to start: ' + e, 'error');
+  }
+  refreshPentestStatus();
+}
+
+async function stopPentest() {
+  await fetch('/api/pentest/stop', {method:'POST'});
+  pentestLog('Engine stopped', 'warn');
+  refreshPentestStatus();
+}
+
+async function loadReport() {
+  try {
+    const text = await fetch('/api/pentest/reports/latest').then(r => r.text());
+    $('report-preview').textContent = text;
+    $('report-meta').textContent = 'Loaded';
+  } catch(e) {
+    $('report-meta').textContent = 'No reports found';
+  }
+}
+
+// ── Terminal ──────────────────────────────────────────────────────────────────
+let term = null, termFitAddon = null, termWs = null;
+
+function initTerminal() {
+  if (term) return;
+  const Terminal = window.Terminal;
+  const FitAddon = window.FitAddon?.FitAddon || window.FitAddon;
+  term = new Terminal({
+    theme: { background:'#0a0a0f', foreground:'#cccccc', cursor:'#00ff88' },
+    fontFamily: 'Courier New, monospace',
+    fontSize: 14,
+    cursorBlink: true,
+  });
+  termFitAddon = new FitAddon();
+  term.loadAddon(termFitAddon);
+  term.open($('terminal'));
+  termFitAddon.fit();
+
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  termWs = new WebSocket(`${proto}://${location.host}/ws/terminal`);
+  termWs.onopen = () => { term.write('\r\n\x1b[32m  Connected to Ghostlink shell\x1b[0m\r\n'); };
+  termWs.onmessage = e => term.write(e.data);
+  termWs.onclose = () => { term.write('\r\n\x1b[31m  [disconnected]\x1b[0m\r\n'); };
+
+  term.onData(data => { if (termWs.readyState === 1) termWs.send(data); });
+
+  const resizeObserver = new ResizeObserver(() => {
+    termFitAddon.fit();
+    const { rows, cols } = term;
+    if (termWs.readyState === 1) termWs.send(`\x1b[8;${rows};${cols}t`);
+  });
+  resizeObserver.observe($('terminal-container'));
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+(async () => {
+  await Promise.all([refreshStats(), refreshIfaces(), refreshIdentity(), loadProfiles()]);
+  refreshPentestStatus();
+  setInterval(refreshStats, 5000);
+  setInterval(refreshIfaces, 10000);
+  setInterval(refreshIdentity, 15000);
+  setInterval(refreshPentestStatus, 5000);
+})();
+</script>
+</body>
+</html>

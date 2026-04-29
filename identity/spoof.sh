@@ -4,7 +4,10 @@
 
 set -euo pipefail
 
-REPO="/opt/ghostlink"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ ! -f "$REPO/identity/profiles.sh" ]]; then
+    REPO="/opt/ghostlink"
+fi
 source "$REPO/identity/profiles.sh"
 
 IFACE="${1:?Usage: spoof.sh <interface> <profile> <mac>}"

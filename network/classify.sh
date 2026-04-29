@@ -61,6 +61,7 @@ fi
 mgmt_iface=""
 upstream_iface=""
 hotspot_iface=""
+aux_iface=""
 
 # Prefer driver-detected assignment
 for iface in "${!inv_role[@]}"; do
@@ -75,6 +76,9 @@ for iface in "${!inv_role[@]}"; do
         gl-hotspot)
             [[ -z "$hotspot_iface" ]] && hotspot_iface="$iface"
             ;;
+        gl-aux)
+            [[ -z "$aux_iface" ]] && aux_iface="$iface"
+            ;;
     esac
 done
 
@@ -88,6 +92,8 @@ if [[ -z "$mgmt_iface" && -z "$upstream_iface" && -z "$hotspot_iface" ]]; then
             upstream_iface="$iface"
         elif [[ "$t" == "usb" && -z "$hotspot_iface" && "$iface" != "$upstream_iface" ]]; then
             hotspot_iface="$iface"
+        elif [[ "$t" == "usb" && -z "$aux_iface" && "$iface" != "$upstream_iface" && "$iface" != "$hotspot_iface" ]]; then
+            aux_iface="$iface"
         fi
     done
 fi
@@ -96,6 +102,7 @@ if $MAP_ONLY; then
     echo "gl-mgmt=${mgmt_iface:-}"
     echo "gl-upstream=${upstream_iface:-}"
     echo "gl-hotspot=${hotspot_iface:-}"
+    echo "gl-aux=${aux_iface:-}"
     exit 0
 fi
 
@@ -106,6 +113,7 @@ d = {
   'gl-mgmt':    '${mgmt_iface:-}',
   'gl-upstream':'${upstream_iface:-}',
   'gl-hotspot': '${hotspot_iface:-}',
+  'gl-aux':     '${aux_iface:-}',
 }
 print(json.dumps(d, indent=2))
 "
@@ -115,11 +123,13 @@ fi
 echo ""
 echo "  Interface role assignment:"
 printf "  %-14s → %-12s  driver=%-12s  mac=%s\n" \
-    "gl-mgmt"    "${mgmt_iface:-NONE}"     "${inv_driver[$mgmt_iface]:-N/A}"    "${inv_mac[$mgmt_iface]:-N/A}"
+    "gl-mgmt"    "${mgmt_iface:-NONE}"     "${inv_driver[$mgmt_iface]:-N/A}"     "${inv_mac[$mgmt_iface]:-N/A}"
 printf "  %-14s → %-12s  driver=%-12s  mac=%s\n" \
     "gl-upstream" "${upstream_iface:-NONE}" "${inv_driver[$upstream_iface]:-N/A}" "${inv_mac[$upstream_iface]:-N/A}"
 printf "  %-14s → %-12s  driver=%-12s  mac=%s\n" \
     "gl-hotspot"  "${hotspot_iface:-NONE}"  "${inv_driver[$hotspot_iface]:-N/A}"  "${inv_mac[$hotspot_iface]:-N/A}"
+printf "  %-14s → %-12s  driver=%-12s  mac=%s\n" \
+    "gl-aux"      "${aux_iface:-NONE}"      "${inv_driver[$aux_iface]:-N/A}"      "${inv_mac[$aux_iface]:-N/A}"
 echo ""
 
 # ── Write systemd .link files (driver-based — survive USB re-enumeration) ───
@@ -153,12 +163,14 @@ EOF
 }
 
 if $WRITE_LINK; then
-    [[ -n "$mgmt_iface" ]]     && write_link_driver gl-mgmt    "${inv_driver[$mgmt_iface]:-}"
-    [[ -n "$mgmt_iface" ]]     && write_link_mac    gl-mgmt    "${inv_mac[$mgmt_iface]:-}"
-    [[ -n "$upstream_iface" ]] && write_link_driver gl-upstream "${inv_driver[$upstream_iface]:-}"
-    [[ -n "$upstream_iface" ]] && write_link_mac    gl-upstream "${inv_mac[$upstream_iface]:-}"
-    [[ -n "$hotspot_iface" ]]  && write_link_driver gl-hotspot  "${inv_driver[$hotspot_iface]:-}"
-    [[ -n "$hotspot_iface" ]]  && write_link_mac    gl-hotspot  "${inv_mac[$hotspot_iface]:-}"
+    [[ -n "$mgmt_iface" ]]     && write_link_driver gl-mgmt     "${inv_driver[$mgmt_iface]:-}"
+    [[ -n "$mgmt_iface" ]]     && write_link_mac    gl-mgmt     "${inv_mac[$mgmt_iface]:-}"
+    [[ -n "$upstream_iface" ]] && write_link_driver gl-upstream  "${inv_driver[$upstream_iface]:-}"
+    [[ -n "$upstream_iface" ]] && write_link_mac    gl-upstream  "${inv_mac[$upstream_iface]:-}"
+    [[ -n "$hotspot_iface" ]]  && write_link_driver gl-hotspot   "${inv_driver[$hotspot_iface]:-}"
+    [[ -n "$hotspot_iface" ]]  && write_link_mac    gl-hotspot   "${inv_mac[$hotspot_iface]:-}"
+    [[ -n "$aux_iface" ]]      && write_link_driver gl-aux       "${inv_driver[$aux_iface]:-}"
+    [[ -n "$aux_iface" ]]      && write_link_mac    gl-aux       "${inv_mac[$aux_iface]:-}"
 fi
 
 # ── Write udev rules (USB ID-based — active even before driver loads) ────────
@@ -168,7 +180,7 @@ write_udev_rules() {
     mkdir -p "$UDEV_DIR"
     cat > "$UDEV_DIR/72-ghostlink-wifi.rules" <<'EOF'
 # Ghostlink deterministic WiFi interface naming (USB ID-based)
-# Ensures RTL8812AU → gl-upstream and RTL88x2BU → gl-hotspot
+# RTL8812AU → gl-upstream, RTL88x2BU → gl-hotspot, RTL8188EUS → gl-aux
 # regardless of USB enumeration order.
 
 # RTL8812AU — pentest/upstream (aircrack-ng monitor+injection driver)
@@ -179,12 +191,20 @@ SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="2357", ATTRS{i
 SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="2357", ATTRS{idProduct}=="0103", NAME="gl-upstream"
 SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="a811", NAME="gl-upstream"
 
-# RTL88x2BU — distribution AP (morrownr AP-mode driver)
+# RTL88x2BU — distribution AP / preferred hotspot (morrownr AP-mode driver)
 SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="b812", NAME="gl-hotspot"
 SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="b820", NAME="gl-hotspot"
 SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="b82c", NAME="gl-hotspot"
 SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="2001", ATTRS{idProduct}=="331e", NAME="gl-hotspot"
 SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="c820", NAME="gl-hotspot"
+
+# RTL8188EUS — auxiliary adapter / fallback AP (aircrack-ng rtl8188eus driver)
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="8179", NAME="gl-aux"
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="8178", NAME="gl-aux"
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="817e", NAME="gl-aux"
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="0179", NAME="gl-aux"
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="2001", ATTRS{idProduct}=="3311", NAME="gl-aux"
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="2357", ATTRS{idProduct}=="010c", NAME="gl-aux"
 EOF
     echo "  Wrote: $UDEV_DIR/72-ghostlink-wifi.rules"
 }
@@ -200,5 +220,6 @@ mkdir -p "$(dirname "$MAP_FILE")"
     echo "gl-mgmt=${mgmt_iface:-}"
     echo "gl-upstream=${upstream_iface:-}"
     echo "gl-hotspot=${hotspot_iface:-}"
+    echo "gl-aux=${aux_iface:-}"
 } > "$MAP_FILE"
 echo "  Saved: $MAP_FILE"

@@ -320,7 +320,7 @@ Versions are pinned in `config/sources.conf` and can be bumped independently.
 ### ZRAM
 ```
 Physical RAM:    2048 MB
-ZRAM size:       1024 MB  (zstd compression, ~2x ratio = ~2 GB effective)
+ZRAM size:       2048 MB  (zstd compression, RPi-only)
 NVMe Swap:       2048 MB  (emergency only)
 Total effective: ~6 GB
 

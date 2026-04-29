@@ -4,7 +4,12 @@
 
 set -euo pipefail
 
-REPO="/opt/ghostlink"
+# Resolve REPO relative to this script's location (works from source tree AND /opt/ghostlink)
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Fall back to /opt/ghostlink if profiles.sh is not found relative to script
+if [[ ! -f "$REPO/identity/profiles.sh" ]]; then
+    REPO="/opt/ghostlink"
+fi
 source "$REPO/identity/profiles.sh"
 
 IFACE="${1:?Usage: rotate.sh <interface> <profile|random>}"

@@ -1,6 +1,6 @@
 # Ghostlink — First Hardware Test Sequence
 
-RPi 5 (2 GB RAM + 256 GB NVMe).  Run each section in order.
+Raspberry Pi 5 (2 GB RAM + 256 GB NVMe).  Run each section in order.
 All commands run as root (`sudo -i` or from root shell).
 
 ---
@@ -12,9 +12,9 @@ Goal: SSH access stays alive throughout; gl-mgmt never becomes the default route
 ```bash
 # 1. Confirm interface exists and has IP
 ip link show gl-mgmt
-ip -4 addr show gl-mgmt          # expect 192.168.x.x or DHCP lease
+ip -4 addr show gl-mgmt          # expect DHCP lease or manual IP
 
-# 2. Confirm it is the NOT default route
+# 2. Confirm gl-mgmt is NOT the default route
 ip route show default             # should NOT list gl-mgmt
 
 # 3. Show mgmt state
@@ -24,75 +24,76 @@ ghostlink mgmt status
 #    ssh pi@<mgmt-ip>
 ```
 
-Expected: IP assigned, no default route via gl-mgmt, SSH works.
+Expected: IP assigned, no default route via gl-mgmt, SSH works throughout.
 
 ---
 
 ## B — Adapter Detection
 
-Goal: Both RTL adapters appear under their assigned interface names.
+Goal: All three RTL adapters appear under assigned interface names.
 
 ```bash
-# 1. List USB devices
-lsusb | grep -iE "rtl|realtek|0bda"
+# 1. List USB WiFi devices
+lsusb | grep -iE "realtek|0bda|2357|tp-link"
 
 # 2. Hardware inventory
 ghostlink interfaces
 
 # 3. Check interface names
-ip link show gl-upstream
-ip link show gl-hotspot
+ip link show gl-upstream    # RTL8812AU  — pentest/upstream
+ip link show gl-hotspot     # RTL88x2BU  — preferred hotspot
+ip link show gl-aux         # RTL8188EUS — auxiliary/fallback
 
-# 4. Check drivers loaded
-lsmod | grep -E "88XXau|88x2bu|brcmfmac"
+# 4. Check role assignment
+ghostlink interfaces roles
+
+# 5. Check drivers loaded
+lsmod | grep -E "88XXau|88x2bu|8188eu|brcmfmac"
 ```
 
 Expected:
-- `gl-upstream` present, driver `88XXau`
-- `gl-hotspot` present, driver `88x2bu`
-- Both show `DOWN` operstate (not yet configured)
+- `gl-upstream` → driver `88XXau`
+- `gl-hotspot` → driver `88x2bu`
+- `gl-aux` → driver `8188eu`
+- All present, operstate `DOWN` or `UP`
 
-If either is missing:
+If an interface is missing:
 ```bash
 # Check udev rules applied
 cat /etc/udev/rules.d/72-ghostlink-wifi.rules
 
-# Check systemd .link files
-cat /etc/systemd/network/10-gl-upstream.link
-cat /etc/systemd/network/10-gl-hotspot.link
+# Check .link files
+ls /etc/systemd/network/10-gl-*.link
 
 # Force udev re-trigger (unplug/replug adapter first)
-udevadm control --reload-rules
-udevadm trigger --subsystem-match=net
+udevadm control --reload-rules && udevadm trigger --subsystem-match=net
+sleep 2
+ip link show
 ```
 
 ---
 
-## C — RTL8812AU Driver (gl-upstream)
+## C — RTL8812AU Driver (gl-upstream / pentest)
 
-Goal: Confirm 88XXau is loaded and gl-upstream supports monitor mode.
+Goal: 88XXau loaded, gl-upstream supports monitor + packet injection.
 
 ```bash
-# 1. Driver loaded?
+# 1. Module loaded?
 lsmod | grep 88XXau
 
-# 2. If not loaded — probe manually
+# 2. Manual probe if not loaded
 modprobe 88XXau
 lsmod | grep 88XXau
 
-# 3. Interface exists?
-ip link show gl-upstream
+# 3. Monitor mode capability
+phy=$(iw dev gl-upstream info | awk '/wiphy/{print "phy"$2}')
+iw phy "$phy" info | grep -A20 "Supported interface modes"
+# Expect "* monitor" and "* managed" in the list
 
-# 4. Monitor mode capable?
-iw dev gl-upstream info
-iw phy $(iw dev gl-upstream info | awk '/wiphy/{print "phy"$2}') info | grep -A20 "Supported interface modes"
-# Expect "* monitor" in the list
-
-# 5. Switch to monitor mode
+# 4. Toggle monitor mode
 ghostlink upstream monitor
 iw dev gl-upstream info          # type should be "monitor"
 
-# 6. Switch back to station
 ghostlink upstream station
 iw dev gl-upstream info          # type should be "managed"
 ```
@@ -101,63 +102,114 @@ Expected: Monitor mode toggle works, interface name stays `gl-upstream` througho
 
 Troubleshoot if 88XXau not loading:
 ```bash
-# Check DKMS build status
-dkms status
-
-# Check blacklist is in place
-cat /etc/modprobe.d/ghostlink-realtek.conf
-
-# Check for conflicting in-tree module
-lsmod | grep -E "rtl8xxxu|rtw88"
-
-# If conflicting: unload and re-probe
+cat /etc/modprobe.d/ghostlink-realtek.conf   # blacklist must be present
+lsmod | grep -E "rtl8xxxu|rtw88"             # conflicting in-tree drivers?
 rmmod rtl8xxxu rtw88_8822bu rtw88_usb rtw88_8812au 2>/dev/null || true
 modprobe 88XXau
+dkms status                                  # check DKMS build status
 ```
 
 ---
 
-## D — Scan Test
+## D — RTL8188EUS Driver (gl-aux / auxiliary)
 
-Goal: gl-upstream can see surrounding networks in monitor mode.
+Goal: 8188eu loaded, gl-aux present and capable of monitor + AP mode.
+
+```bash
+# 1. USB detected?
+lsusb | grep -E "0bda:8179|0bda:817[e8]|2357:010c|2001:3311"
+
+# 2. Module loaded?
+lsmod | grep 8188eu
+
+# 3. Manual probe if not loaded
+modprobe 8188eu
+lsmod | grep 8188eu
+
+# 4. Interface present?
+ip link show gl-aux
+iw dev gl-aux info
+
+# 5. Check mode capabilities
+phy=$(iw dev gl-aux info | awk '/wiphy/{print "phy"$2}')
+iw phy "$phy" info | grep -A20 "Supported interface modes"
+# Expect "* monitor" and "* AP" in the list (aircrack-ng 8188eus driver)
+
+# 6. Full status
+ghostlink aux status
+```
+
+Expected: `gl-aux` present, driver `8188eu`, monitor and AP mode supported.
+
+Troubleshoot:
+```bash
+dkms status | grep 8188
+journalctl -b | grep -i "8188\|rtl8188"
+# If DKMS build failed, re-run driver installation:
+# sudo /opt/ghostlink/install/steps/03_drivers.sh /opt/ghostlink
+```
+
+---
+
+## E — RTL8188EUS Monitor Mode (auxiliary scan)
+
+Goal: gl-aux can scan networks independently of gl-upstream.
+
+```bash
+# Switch gl-aux to monitor mode
+ghostlink aux monitor
+iw dev gl-aux info          # type should be "monitor"
+
+# Auxiliary scan
+ghostlink aux scan
+
+# Or raw airodump-ng on gl-aux
+airodump-ng gl-aux
+# Ctrl-C after a few seconds
+
+# Restore managed mode
+ghostlink aux station
+```
+
+Expected: Table of SSIDs/BSSIDs visible via gl-aux.
+
+---
+
+## F — Scan Test (gl-upstream primary scan)
+
+Goal: gl-upstream sees surrounding networks in monitor mode.
 
 ```bash
 # Scan (auto-switches to monitor if needed)
 ghostlink scan
 
-# Or scan with longer duration
+# Longer scan
 ghostlink scan gl-upstream --duration 20
-
-# Alternative: raw airodump-ng
-ghostlink upstream monitor
-airodump-ng gl-upstream
-# Ctrl-C after a few seconds
-ghostlink upstream station
 ```
 
-Expected: Table of SSIDs, BSSIDs, channels, and signal levels.
+Expected: Table of SSIDs, BSSIDs, channels, signal levels.
 
 ---
 
-## E — Upstream Connect Test
+## G — Upstream Connect Test
 
 Goal: gl-upstream connects to a real WiFi network and provides internet.
 
 ```bash
-# 1. Switch to station mode
+# Switch to station mode
 ghostlink upstream station
 
-# 2. Connect to a known network
+# Connect to a known network
 ghostlink upstream connect "YourSSID" "YourPassword"
 
-# 3. Check IP assigned
+# Check IP assigned
 ip -4 addr show gl-upstream
-ip route show                    # gl-upstream should be default route
+ip route show                # gl-upstream should be default route metric 100
 
-# 4. Test internet via gl-upstream
+# Test internet via gl-upstream
 curl --interface gl-upstream https://ifconfig.me
 
-# 5. Check upstream state
+# Check upstream state
 ghostlink upstream status
 ```
 
@@ -165,92 +217,155 @@ Expected: IP via DHCP, default route through gl-upstream, internet reachable.
 
 ---
 
-## F — Hotspot Test
+## H — Hotspot Test (primary: gl-hotspot)
 
-Goal: gl-hotspot broadcasts AP, clients can connect and get IPs.
+Goal: gl-hotspot broadcasts AP, clients connect and get IPs.
 
 ```bash
-# 1. Review config
+# Review config
 grep -A10 '\[hotspot\]' /etc/ghostlink/ghostlink.conf
 
-# 2. Start hotspot
+# Start hotspot
 ghostlink hotspot start
 
-# 3. Verify services
+# Status
 ghostlink hotspot status
-systemctl status hostapd --no-pager
-systemctl status dnsmasq --no-pager
+systemctl status hostapd dnsmasq --no-pager
 
-# 4. Check AP is broadcasting
+# Check AP broadcasting
 iw dev gl-hotspot info
 
-# 5. Connect a client device to "GhostNet" (or configured SSID)
-#    Client should get 192.168.50.x address
-#    Confirm from client: ping 192.168.50.1
+# Connect a client device to the SSID (default: GhostNet)
+# Client should get 192.168.50.x
+# Confirm from client: ping 192.168.50.1
 ```
-
-Expected: hostapd active, AP visible to WiFi clients, DHCP leases assigned.
 
 Troubleshoot:
 ```bash
 journalctl -u hostapd -n 50
 journalctl -u dnsmasq -n 50
 cat /etc/hostapd/hostapd.conf
-cat /etc/dnsmasq.conf
 ```
 
 ---
 
-## G — NAT / Internet Sharing Test
+## I — RTL8188EUS Fallback Hotspot
 
-Goal: Client connected to hotspot can reach internet through gl-upstream.
-
-Prerequisites: Section E (upstream connected) and Section F (hotspot active) complete.
+Goal: gl-aux can serve as AP when RTL88x2BU (gl-hotspot) is unavailable.
 
 ```bash
-# 1. Verify NAT rules
+# Enable fallback in config
+sed -i 's/fallback_hotspot=false/fallback_hotspot=true/' /etc/ghostlink/ghostlink.conf
+
+# Stop gl-hotspot (simulate missing)
+ip link set gl-hotspot down 2>/dev/null || true
+
+# Start hotspot — should auto-use gl-aux
+ghostlink hotspot start
+
+# Verify fallback is active
+ghostlink hotspot status
+cat /run/ghostlink/hotspot.state
+
+# Verify NAT uses correct interface
+ghostlink nat status
+```
+
+Expected: hostapd active on `gl-aux`, hotspot.state shows `HOTSPOT_IFACE=gl-aux`.
+
+---
+
+## J — NAT / Internet Sharing Test
+
+Prerequisites: Section G (upstream connected) and H or I (hotspot active) complete.
+
+```bash
+# Verify NAT rules
 ghostlink nat status
 
-# 2. Apply / re-apply if needed
+# Apply / re-apply if needed
 ghostlink nat start
 
-# 3. From a client connected to the hotspot:
-#    ping 8.8.8.8
-#    curl https://ifconfig.me
+# From a client on the hotspot:
+#   ping 8.8.8.8
+#   curl https://ifconfig.me
 
-# 4. Confirm forwarding is on
-sysctl net.ipv4.ip_forward      # expect 1
+# Confirm forwarding is on
+sysctl net.ipv4.ip_forward    # expect 1
 
-# 5. Check iptables chains
+# Check iptables chains
 iptables -L GHOSTLINK_FORWARD -v
 iptables -t nat -L GHOSTLINK_NAT -v
 ```
 
-Expected: Client traffic exits via gl-upstream; client sees internet-facing IP of RPi upstream.
+Expected: Client traffic exits via gl-upstream, client gets internet.
 
 ---
 
-## H — Doctor and Logs
+## K — ZRAM (Raspberry Pi only)
 
-Run these after the above tests and collect output before reporting issues.
+Goal: 2GB ZRAM swap active with zstd compression.
+
+```bash
+# Check if ZRAM is active
+swapon --show
+# Expect: /dev/zram0  size=2G  priority=100
+
+# Check compression
+cat /sys/block/zram0/comp_algorithm
+# Expect: [zstd] or zstd
+
+# Check size
+cat /sys/block/zram0/disksize
+# Expect: 2147483648 (2 GB in bytes)
+
+# Full ZRAM status
+zramctl
+```
+
+Expected: `/dev/zram0` active, 2GB, zstd, priority 100.
+
+Troubleshoot:
+```bash
+systemctl status gl-system --no-pager
+journalctl -u gl-system -n 30 --no-pager
+# Manually run ZRAM setup:
+bash /opt/ghostlink/system/zram.sh apply
+```
+
+---
+
+## L — Doctor and Full Log Collection
+
+Run after all tests and collect before filing issues.
 
 ```bash
 ghostlink doctor
 
+# Interface and route snapshot
+ip link
+ip route
+ip -4 addr
+
+# Service status
+systemctl status ghostlink.target gl-system gl-network gl-identity gl-dashboard --no-pager
+
+# Logs
 journalctl -u gl-network  -n 100 --no-pager
 journalctl -u gl-identity -n 50  --no-pager
+journalctl -u gl-system   -n 50  --no-pager
 journalctl -u hostapd     -n 50  --no-pager
 journalctl -u dnsmasq     -n 50  --no-pager
 
+# Drivers
 dkms status
-lsmod | grep -E "88XXau|88x2bu|brcmfmac|rtl8xxxu|rtw88"
-ip link
-ip route
+lsmod | grep -E "88XXau|88x2bu|8188eu|brcmfmac|rtl8xxxu|rtw88"
+
+# NAT and USB
 iptables -L -v --line-numbers
 iptables -t nat -L -v
+lsusb | grep -iE "0bda|2357|realtek"
 ```
-
-Paste the above output when filing issues.
 
 ---
 
@@ -262,10 +377,16 @@ Paste the above output when filing issues.
 | No default via mgmt | `ip route show default` | gl-mgmt not listed |
 | gl-upstream exists | `ip link show gl-upstream` | Interface present |
 | gl-hotspot exists | `ip link show gl-hotspot` | Interface present |
+| gl-aux exists | `ip link show gl-aux` | Interface present |
 | 88XXau loaded | `lsmod \| grep 88XXau` | Module listed |
-| Monitor mode | `ghostlink upstream monitor` | Returns 0, `iw` shows monitor |
+| 8188eu loaded | `lsmod \| grep 8188eu` | Module listed |
+| Monitor mode | `ghostlink upstream monitor` | Returns 0, iw shows monitor |
+| Aux status | `ghostlink aux status` | Monitor=yes, AP=yes |
+| Aux scan | `ghostlink aux scan` | APs visible |
 | Scan | `ghostlink scan` | Table of APs appears |
 | Upstream connect | `ghostlink upstream connect SSID PW` | IP assigned |
 | Hotspot start | `ghostlink hotspot start` | hostapd active |
+| Fallback hotspot | disable gl-hotspot + `ghostlink hotspot start` | gl-aux used |
 | NAT | `ghostlink nat status` | MASQUERADE rule present |
 | Client internet | from client: `curl ifconfig.me` | Returns IP |
+| ZRAM | `swapon --show` | /dev/zram0 2G priority=100 |

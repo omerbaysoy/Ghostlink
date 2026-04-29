@@ -12,8 +12,15 @@
 set -euo pipefail
 
 UPSTREAM="gl-upstream"
-HOTSPOT="gl-hotspot"
 MGMT="gl-mgmt"
+
+# Effective hotspot interface: use gl-hotspot (preferred) unless setup_hotspot.sh
+# wrote a fallback interface to /run/ghostlink/hotspot.state (RTL8188EUS fallback case)
+HOTSPOT="gl-hotspot"
+if [[ -f /run/ghostlink/hotspot.state ]]; then
+    _eff=$(grep '^HOTSPOT_IFACE=' /run/ghostlink/hotspot.state 2>/dev/null | cut -d= -f2)
+    [[ -n "$_eff" ]] && HOTSPOT="$_eff"
+fi
 
 CHAIN_FWD="GHOSTLINK_FORWARD"
 CHAIN_NAT="GHOSTLINK_NAT"

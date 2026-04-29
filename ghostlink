@@ -15,7 +15,11 @@ case "$cmd" in
         ;;
 
     interfaces)
-        bash "$REPO/network/hw_inventory.sh" text
+        sub="${1:-}"; shift || true
+        case "$sub" in
+            roles)  bash "$REPO/network/classify.sh" --map-only ;;
+            *)      bash "$REPO/network/hw_inventory.sh" text ;;
+        esac
         ;;
 
     mgmt)
@@ -43,6 +47,74 @@ case "$cmd" in
         esac
         ;;
 
+    aux)
+        sub="${1:-status}"; shift || true
+        AUX_IFACE="gl-aux"
+        case "$sub" in
+            status)
+                echo ""
+                echo "  Auxiliary Interface ($AUX_IFACE / RTL8188EUS)"
+                echo "  ─────────────────────────────────────────────"
+                if ip link show "$AUX_IFACE" &>/dev/null; then
+                    state=$(cat /sys/class/net/"$AUX_IFACE"/operstate 2>/dev/null || echo "unknown")
+                    driver=$(basename "$(readlink -f "/sys/class/net/$AUX_IFACE/device/driver" 2>/dev/null)" 2>/dev/null || echo "n/a")
+                    mac=$(cat /sys/class/net/"$AUX_IFACE"/address 2>/dev/null || echo "n/a")
+                    echo "  Interface : $AUX_IFACE"
+                    echo "  State     : $state"
+                    echo "  Driver    : $driver"
+                    echo "  MAC       : $mac"
+                    # Check mode capabilities
+                    phy=$(iw dev "$AUX_IFACE" info 2>/dev/null | awk '/wiphy/{print "phy"$2}')
+                    if [[ -n "$phy" ]]; then
+                        iw_out=$(iw phy "$phy" info 2>/dev/null || echo "")
+                        echo "  Monitor   : $(echo "$iw_out" | grep -q 'monitor' && echo yes || echo no)"
+                        echo "  AP mode   : $(echo "$iw_out" | grep -qE '\* AP$|\* AP ' && echo yes || echo no)"
+                    fi
+                    # Check fallback hotspot config
+                    fallback=$(awk -F'=' '/^\[aux\]/{s=1} s && /^fallback_hotspot=/{print $2; exit}' "$CONF" 2>/dev/null || echo "false")
+                    echo "  Fallback  : hotspot=$fallback"
+                else
+                    echo "  Interface : not found (RTL8188EUS adapter not plugged in)"
+                    if lsusb 2>/dev/null | grep -qiE '2357:010c|0bda:8179|0bda:817[e8]'; then
+                        echo "  USB       : RTL8188EUS detected — driver may not be loaded"
+                        echo "  Tip       : modprobe 8188eu"
+                    fi
+                fi
+                echo ""
+                ;;
+            monitor)
+                if ! ip link show "$AUX_IFACE" &>/dev/null; then
+                    echo "  [aux] $AUX_IFACE not found"; exit 1
+                fi
+                ip link set dev "$AUX_IFACE" down
+                iw dev "$AUX_IFACE" set type monitor
+                ip link set dev "$AUX_IFACE" up
+                echo "  [aux] ✓ $AUX_IFACE → monitor mode"
+                ;;
+            station)
+                if ! ip link show "$AUX_IFACE" &>/dev/null; then
+                    echo "  [aux] $AUX_IFACE not found"; exit 1
+                fi
+                ip link set dev "$AUX_IFACE" down
+                iw dev "$AUX_IFACE" set type managed
+                ip link set dev "$AUX_IFACE" up
+                echo "  [aux] ✓ $AUX_IFACE → station mode"
+                ;;
+            scan)
+                if ! ip link show "$AUX_IFACE" &>/dev/null; then
+                    echo "  [aux] $AUX_IFACE not found"; exit 1
+                fi
+                # Switch to monitor for scan
+                ip link set dev "$AUX_IFACE" down 2>/dev/null || true
+                iw dev "$AUX_IFACE" set type monitor 2>/dev/null || true
+                ip link set dev "$AUX_IFACE" up
+                "$REPO/venv/bin/python3" "$REPO/pentest/scan.py" "$AUX_IFACE" "$@"
+                ;;
+            *)
+                echo "Usage: ghostlink aux {status|monitor|station|scan}" ;;
+        esac
+        ;;
+
     hotspot)
         sub="${1:-status}"; shift || true
         case "$sub" in
@@ -50,6 +122,19 @@ case "$cmd" in
             stop|off)    systemctl stop hostapd dnsmasq 2>/dev/null; echo "  [hotspot] stopped" ;;
             status)
                 echo ""
+                # Show which interface is being used (primary or fallback)
+                if ip link show gl-hotspot &>/dev/null; then
+                    echo "  Hotspot interface : gl-hotspot (RTL88x2BU — preferred)"
+                elif ip link show gl-aux &>/dev/null; then
+                    fallback=$(awk -F'=' '/^\[aux\]/{s=1} s && /^fallback_hotspot=/{print $2; exit}' "$CONF" 2>/dev/null || echo "false")
+                    if [[ "$fallback" == "true" ]]; then
+                        echo "  Hotspot interface : gl-aux (RTL8188EUS — fallback)"
+                    else
+                        echo "  Hotspot interface : none (gl-hotspot missing; fallback_hotspot=false)"
+                    fi
+                else
+                    echo "  Hotspot interface : none (no hotspot-capable adapter found)"
+                fi
                 for svc in hostapd dnsmasq; do
                     state=$(systemctl is-active "$svc" 2>/dev/null || echo "inactive")
                     echo "  $svc : $state"
@@ -77,7 +162,8 @@ case "$cmd" in
             rotate)     bash "$REPO/identity/rotate.sh"  gl-upstream random ;;
             restore)    bash "$REPO/identity/restore.sh" gl-upstream ;;
             list)       jq -r 'keys[]' /etc/ghostlink/device_profiles.json ;;
-            set)        bash "$REPO/identity/spoof.sh"   gl-upstream "$1" ;;
+            # Fix: delegate to rotate.sh which generates MAC from profile OUI
+            set)        bash "$REPO/identity/rotate.sh"  gl-upstream "${1:?'profile name required'}" ;;
             *)          bash "$REPO/identity/status.sh" ;;
         esac
         ;;
@@ -85,8 +171,8 @@ case "$cmd" in
     scan)
         iface="${1:-gl-upstream}"
         shift || true
-        # Put upstream into monitor mode if needed, then scan
-        current_mode=$(cat /var/lib/ghostlink/upstream.state 2>/dev/null | grep '^mode=' | cut -d= -f2 || echo "")
+        # Fix: read uppercase MODE= key from upstream.state
+        current_mode=$(grep -i '^MODE=' /var/lib/ghostlink/upstream.state 2>/dev/null | cut -d= -f2 | tr '[:upper:]' '[:lower:]' || echo "")
         if [[ "$current_mode" != "monitor" ]]; then
             echo "  Switching gl-upstream to monitor mode..."
             bash "$REPO/network/upstream_mode.sh" monitor
@@ -109,6 +195,7 @@ case "$cmd" in
         echo "Dashboard: https://${ip}:8080"
         ;;
 
+    # Fix: update-tools now works because install/ is included in rsync
     update-tools)
         bash "$REPO/install/steps/07_tools.sh" "$REPO"
         ;;
@@ -116,7 +203,7 @@ case "$cmd" in
     doctor)
         echo ""
         echo "  ── Interfaces ──────────────────────────────────────"
-        for iface in gl-mgmt gl-upstream gl-hotspot; do
+        for iface in gl-mgmt gl-upstream gl-hotspot gl-aux; do
             state=$(cat /sys/class/net/"$iface"/operstate 2>/dev/null || echo "missing")
             ip=$(ip -4 addr show "$iface" 2>/dev/null | awk '/inet /{split($2,a,"/"); print a[1]; exit}')
             driver=$(basename "$(readlink -f "/sys/class/net/$iface/device/driver" 2>/dev/null)" 2>/dev/null || echo "n/a")
@@ -124,9 +211,10 @@ case "$cmd" in
         done
         echo ""
         echo "  ── Services ─────────────────────────────────────────"
-        for svc in gl-network gl-identity ghostlink hostapd dnsmasq; do
+        # Fix: check ghostlink.target and correct service names, not "ghostlink" (nonexistent)
+        for svc in ghostlink.target gl-system gl-network gl-identity gl-dashboard gl-fan hostapd dnsmasq; do
             state=$(systemctl is-active "$svc" 2>/dev/null || echo "inactive")
-            printf "  %-20s  %s\n" "$svc" "$state"
+            printf "  %-24s  %s\n" "$svc" "$state"
         done
         echo ""
         echo "  ── Upstream state ───────────────────────────────────"
@@ -136,13 +224,16 @@ case "$cmd" in
         bash "$REPO/network/nat.sh" status 2>/dev/null || echo "  (nat.sh unavailable)"
         echo ""
         echo "  ── Drivers ──────────────────────────────────────────"
-        for mod in 88XXau 88x2bu brcmfmac; do
+        for mod in 88XXau 88x2bu 8188eu brcmfmac; do
             if lsmod 2>/dev/null | grep -q "^${mod}[[:space:]]"; then
                 echo "  $mod : loaded"
             else
                 echo "  $mod : NOT loaded"
             fi
         done
+        echo ""
+        echo "  ── USB WiFi adapters ────────────────────────────────"
+        lsusb 2>/dev/null | grep -iE "0bda|2357|realtek|tp-link" || echo "  (none detected)"
         echo ""
         ;;
 
@@ -155,6 +246,7 @@ case "$cmd" in
         echo ""
         echo "  status                          System overview"
         echo "  interfaces                      Hardware WiFi inventory"
+        echo "  interfaces roles                Role assignment map"
         echo ""
         echo "  mgmt   status                   Management WiFi status"
         echo "  mgmt   keep                     Keep current gl-mgmt connection"
@@ -167,9 +259,14 @@ case "$cmd" in
         echo "  upstream  connect <ssid> [pass] Connect to upstream WiFi"
         echo "  upstream  disconnect            Disconnect upstream"
         echo ""
+        echo "  aux       status                RTL8188EUS auxiliary adapter status"
+        echo "  aux       monitor               Switch gl-aux to monitor mode"
+        echo "  aux       station               Switch gl-aux to managed mode"
+        echo "  aux       scan                  Scan networks via gl-aux"
+        echo ""
         echo "  hotspot   start                 Start distribution AP"
         echo "  hotspot   stop                  Stop distribution AP"
-        echo "  hotspot   status                Hotspot service status"
+        echo "  hotspot   status                Hotspot interface and service status"
         echo ""
         echo "  nat       start                 Apply NAT rules"
         echo "  nat       stop                  Remove NAT rules"
@@ -180,7 +277,7 @@ case "$cmd" in
         echo "  pentest  [start|stop|report]"
         echo "  dashboard                       Print dashboard URL"
         echo "  update-tools                    Update pentest tools"
-        echo "  doctor                          Diagnose interface/service issues"
+        echo "  doctor                          Diagnose all interfaces and services"
         echo "  logs                            Live system log stream"
         ;;
     *)

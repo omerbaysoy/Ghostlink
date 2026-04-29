@@ -14,10 +14,11 @@ FORMAT="${1:-text}"
 
 role_for_driver() {
     case "${1:-}" in
-        brcmfmac|brcmfmac_sdio)  echo "gl-mgmt"    ;;
-        88XXau|8812au|rtl8812au)  echo "gl-upstream" ;;
-        88x2bu|rtl88x2bu)         echo "gl-hotspot"  ;;
-        *)                         echo ""            ;;
+        brcmfmac|brcmfmac_sdio)            echo "gl-mgmt"    ;;
+        88XXau|8812au|rtl8812au)            echo "gl-upstream" ;;
+        88x2bu|rtl88x2bu)                   echo "gl-hotspot"  ;;
+        8188eu|rtl8188eus|r8188eu)          echo "gl-aux"      ;;
+        *)                                   echo ""            ;;
     esac
 }
 

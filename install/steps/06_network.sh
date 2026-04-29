@@ -80,10 +80,20 @@ else
     fi
 fi
 
-# ── Hotspot (gl-hotspot) ──────────────────────────────────────────────────────
+# ── Hotspot (gl-hotspot / gl-aux fallback) ───────────────────────────────────
 echo ""
 gl_info "Distribution hotspot (gl-hotspot) configuration"
+gl_info "Preferred: RTL88x2BU (gl-hotspot). Fallback: RTL8188EUS (gl-aux) if enabled."
 gl_info "Client devices connect here and share internet from gl-upstream."
+# Show which hotspot adapter is present
+if ip link show gl-hotspot &>/dev/null; then
+    gl_success "gl-hotspot (RTL88x2BU) detected — preferred adapter"
+elif ip link show gl-aux &>/dev/null; then
+    gl_warn "gl-hotspot not found; gl-aux (RTL8188EUS) available as fallback"
+    gl_warn "Enable fallback: set [aux] fallback_hotspot=true in $CONF"
+else
+    gl_warn "No hotspot adapter found — hotspot will not start until adapter is plugged in"
+fi
 echo ""
 
 EXISTING_HS_SSID=$(awk -F'=' '/^\[hotspot\]/{s=1} s && /^ssid=/{print $2; exit}' "$CONF")

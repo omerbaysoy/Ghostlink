@@ -1,11 +1,24 @@
 #!/usr/bin/env bash
-# ZRAM setup — 1GB zstd, priority 100
+# ZRAM setup — 2GB zstd, priority 100
+# Raspberry Pi deployments only — skipped safely on generic Debian/Ubuntu/Kali
 # Idempotent: skips if ZRAM is already active
 
-ZRAM_SIZE_MB=1024
+ZRAM_SIZE_MB=2048
 ZRAM_COMP=zstd
 
+is_rpi() {
+    [[ -f /proc/device-tree/model ]] && grep -q "Raspberry Pi" /proc/device-tree/model 2>/dev/null && return 0
+    grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null
+}
+
 apply() {
+    # Non-RPi systems: skip with a clear message
+    if ! is_rpi; then
+        echo "ZRAM: not a Raspberry Pi — skipping GhostLink ZRAM setup"
+        echo "ZRAM: (configure system ZRAM manually if needed)"
+        return 0
+    fi
+
     # Already active?
     if swapon --show 2>/dev/null | grep -q zram; then
         echo "ZRAM: already active — skipping"
@@ -31,17 +44,7 @@ apply() {
     mkswap "$dev"
     swapon --priority 100 "$dev"
 
-    # Persist via /etc/default/zramswap if service exists
-    if [[ -f /etc/default/zramswap ]]; then
-        cat > /etc/default/zramswap <<EOF
-ALGO=$ZRAM_COMP
-PERCENT=50
-PRIORITY=100
-EOF
-        systemctl enable zramswap 2>/dev/null || true
-    fi
-
-    echo "ZRAM: ${dev} ${ZRAM_SIZE_MB}MB ${ZRAM_COMP} priority=100"
+    echo "ZRAM: ${dev} ${ZRAM_SIZE_MB}MB ${ZRAM_COMP} priority=100 (Raspberry Pi)"
 }
 
 case "${1:-apply}" in apply) apply ;; esac

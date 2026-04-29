@@ -7,7 +7,7 @@ from flask import Blueprint, jsonify, request
 
 bp = Blueprint("network", __name__)
 
-IFACES = ["gl-mgmt", "gl-upstream", "gl-hotspot"]
+IFACES = ["gl-mgmt", "gl-upstream", "gl-hotspot", "gl-aux"]
 REPO = "/opt/ghostlink"
 
 
@@ -191,6 +191,52 @@ def nat_control():
         capture_output=True, text=True, timeout=15,
     )
     return jsonify({"ok": r.returncode == 0, "output": r.stdout + r.stderr})
+
+
+# ── Auxiliary adapter (RTL8188EUS / gl-aux) ───────────────────────────────────
+
+@bp.get("/api/network/aux/status")
+def aux_status():
+    info = _iface_info("gl-aux")
+    caps = {"monitor": False, "ap": False}
+    if info["state"] != "missing":
+        r = subprocess.run(
+            ["iw", "dev", "gl-aux", "info"],
+            capture_output=True, text=True,
+        )
+        if r.returncode == 0:
+            phy_line = next((l for l in r.stdout.splitlines() if "wiphy" in l), "")
+            if phy_line:
+                phy = "phy" + phy_line.split()[-1]
+                rp = subprocess.run(
+                    ["iw", "phy", phy, "info"],
+                    capture_output=True, text=True,
+                )
+                caps["monitor"] = "monitor" in rp.stdout
+                import re
+                caps["ap"] = bool(re.search(r"\* AP\b", rp.stdout))
+    hotspot_state = _read_state_file("/run/ghostlink/hotspot.state")
+    fallback_active = hotspot_state.get("FALLBACK", "false").lower() == "true" and \
+                      hotspot_state.get("HOTSPOT_IFACE") == "gl-aux"
+    return jsonify({
+        "interface": info,
+        "capabilities": caps,
+        "fallback_hotspot_active": fallback_active,
+    })
+
+
+@bp.post("/api/network/aux/mode")
+def aux_mode():
+    body = request.get_json(silent=True) or {}
+    mode = body.get("mode", "")
+    if mode not in ("monitor", "station"):
+        return jsonify({"error": "mode must be monitor or station"}), 400
+    import subprocess as sp
+    sp.run(["ip", "link", "set", "dev", "gl-aux", "down"], capture_output=True)
+    sp.run(["iw", "dev", "gl-aux", "set", "type", mode if mode == "monitor" else "managed"],
+           capture_output=True)
+    sp.run(["ip", "link", "set", "dev", "gl-aux", "up"], capture_output=True)
+    return jsonify({"ok": True, "mode": mode})
 
 
 # ── Scan ──────────────────────────────────────────────────────────────────────

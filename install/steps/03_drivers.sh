@@ -54,6 +54,9 @@ module_for_chipset() {
 }
 
 # ── Check if driver is already working ────────────────────────────────────────
+# RTL8812AU and RTL88x2BU: require monitor mode capability (pentest adapters).
+# RTL8188EUS (gl-aux): require only functional driver + interface — monitor mode
+# is a bonus, not a requirement (it's used for aux scan and fallback AP).
 driver_works() {
     local chip="$1"
     local mod
@@ -62,8 +65,11 @@ driver_works() {
     # Check various module name variants
     for m in "$mod" "$chip" "${chip/rtl/}" "${chip/eus/eu}"; do
         if driver_functional "$m" 2>/dev/null; then
+            if [[ "$chip" == "rtl8188eus" ]]; then
+                return 0    # gl-aux: functional driver + interface is sufficient
+            fi
             if module_has_monitor "$m" 2>/dev/null; then
-                return 0    # loaded + interface up + monitor capable
+                return 0    # pentest adapters: need monitor mode too
             fi
         fi
     done
@@ -185,10 +191,18 @@ for chip in "${chipsets[@]}"; do
     # Skip if driver already works
     if [[ "${GL_DRIVER_CHECK_FIRST:-true}" == "true" ]]; then
         if driver_works "$chip"; then
-            gl_success "$chip driver already functional with monitor mode — skipping installation"
+            if [[ "$chip" == "rtl8188eus" ]]; then
+                gl_success "$chip driver already functional (gl-aux) — skipping installation"
+            else
+                gl_success "$chip driver already functional with monitor mode — skipping installation"
+            fi
             continue
         fi
-        gl_info "$chip driver not functional or missing monitor mode — installing"
+        if [[ "$chip" == "rtl8188eus" ]]; then
+            gl_info "$chip driver not functional — installing (gl-aux / fallback AP)"
+        else
+            gl_info "$chip driver not functional or missing monitor mode — installing"
+        fi
     fi
 
     # Kali: try apt package first (cleaner, system-integrated)

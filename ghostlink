@@ -206,6 +206,39 @@ case "$cmd" in
         "$REPO/venv/bin/python3" "$REPO/pentest/scan.py" "$iface" "$@"
         ;;
 
+    drivers)
+        sub="${1:-status}"; shift || true
+        case "$sub" in
+            status)         bash "$REPO/network/drivers.sh" status ;;
+            audit)          bash "$REPO/network/drivers.sh" audit ;;
+            fix)
+                target="${1:-}"; shift || true
+                case "$target" in
+                    rtl8812au) bash "$REPO/network/drivers.sh" fix-rtl8812au "$@" ;;
+                    *)         echo "Usage: ghostlink drivers fix rtl8812au [--force]" ;;
+                esac
+                ;;
+            monitor-test)   bash "$REPO/network/drivers.sh" monitor-test "${1:-}" ;;
+            *)              echo "Usage: ghostlink drivers {status|audit|fix rtl8812au [--force]|monitor-test [iface]}" ;;
+        esac
+        ;;
+
+    wifi)
+        sub="${1:-doctor}"; shift || true
+        case "$sub" in
+            doctor) bash "$REPO/network/drivers.sh" wifi-doctor ;;
+            *)      bash "$REPO/network/drivers.sh" wifi-doctor ;;
+        esac
+        ;;
+
+    route)
+        sub="${1:-status}"; shift || true
+        case "$sub" in
+            status) bash "$REPO/network/nat.sh" route-status ;;
+            *)      echo "Usage: ghostlink route status" ;;
+        esac
+        ;;
+
     pentest)
         sub="${1:-}"; shift || true
         case "$sub" in
@@ -217,8 +250,22 @@ case "$cmd" in
         ;;
 
     dashboard)
-        ip="$(hostname -I | awk '{print $1}')"
-        echo "Dashboard: https://${ip}:8080"
+        # Prefer management IP (gl-mgmt); fall back to first available IP
+        _mgmt_actual=$(grep '^gl-mgmt=' /var/lib/ghostlink/interfaces.map 2>/dev/null | cut -d= -f2)
+        [[ -z "$_mgmt_actual" ]] && { [[ -d /sys/class/net/gl-mgmt ]] && _mgmt_actual="gl-mgmt"; }
+        _mgmt_ip=""
+        if [[ -n "$_mgmt_actual" ]]; then
+            _mgmt_ip=$(ip -4 addr show "$_mgmt_actual" 2>/dev/null | awk '/inet /{split($2,a,"/");print a[1];exit}')
+        fi
+        _bind_ip="${_mgmt_ip:-$(hostname -I | awk '{print $1}')}"
+        _svc_state=$(systemctl is-active gl-dashboard 2>/dev/null) || _svc_state="inactive"
+        echo ""
+        echo "  Dashboard URL  : https://${_bind_ip}:8080"
+        echo "  Service        : gl-dashboard (${_svc_state})"
+        if [[ -z "$_mgmt_ip" ]]; then
+            echo "  Warning        : management IP not found — URL may be unreachable from trusted network"
+        fi
+        echo ""
         ;;
 
     # Fix: update-tools now works because install/ is included in rsync
@@ -282,42 +329,50 @@ case "$cmd" in
     ""|--help|-h)
         echo "Usage: ghostlink <command> [subcommand] [args]"
         echo ""
-        echo "  status                          System overview"
-        echo "  interfaces                      Hardware WiFi inventory"
-        echo "  interfaces roles                Role assignment map"
+        echo "  status                                System overview"
+        echo "  interfaces                            Hardware WiFi inventory"
+        echo "  interfaces roles                      Role assignment map"
         echo ""
-        echo "  mgmt   status                   Management WiFi status"
-        echo "  mgmt   keep                     Keep current gl-mgmt connection"
-        echo "  mgmt   configure <ssid> [pass]  Connect gl-mgmt to WiFi"
-        echo "  mgmt   reconnect                Reconnect using saved config"
+        echo "  mgmt   status                         Management WiFi status"
+        echo "  mgmt   keep                           Keep current gl-mgmt connection"
+        echo "  mgmt   configure <ssid> [pass]        Connect gl-mgmt to WiFi"
+        echo "  mgmt   reconnect                      Reconnect using saved config"
         echo ""
-        echo "  upstream  status                gl-upstream current state"
-        echo "  upstream  monitor               Switch to monitor mode"
-        echo "  upstream  station               Switch to managed/station mode"
-        echo "  upstream  connect <ssid> [pass] Connect to upstream WiFi"
-        echo "  upstream  disconnect            Disconnect upstream"
+        echo "  upstream  status                      gl-upstream current state"
+        echo "  upstream  monitor                     Switch to monitor mode"
+        echo "  upstream  station                     Switch to managed/station mode"
+        echo "  upstream  connect <ssid> [pass]       Connect to upstream WiFi"
+        echo "  upstream  disconnect                  Disconnect upstream"
         echo ""
-        echo "  aux       status                RTL8188EUS auxiliary adapter status"
-        echo "  aux       monitor               Switch gl-aux to monitor mode"
-        echo "  aux       station               Switch gl-aux to managed mode"
-        echo "  aux       scan                  Scan networks via gl-aux"
+        echo "  aux       status                      RTL8188EUS auxiliary adapter status"
+        echo "  aux       monitor                     Switch gl-aux to monitor mode"
+        echo "  aux       station                     Switch gl-aux to managed mode"
+        echo "  aux       scan                        Scan networks via gl-aux"
         echo ""
-        echo "  hotspot   start                 Start distribution AP"
-        echo "  hotspot   stop                  Stop distribution AP"
-        echo "  hotspot   status                Hotspot interface and service status"
+        echo "  hotspot   start                       Start distribution AP"
+        echo "  hotspot   stop                        Stop distribution AP"
+        echo "  hotspot   status                      Hotspot interface and service status"
         echo ""
-        echo "  nat       start                 Apply NAT rules"
-        echo "  nat       stop                  Remove NAT rules"
-        echo "  nat       status                Show NAT rule status"
+        echo "  nat       start                       Apply NAT + policy routing rules"
+        echo "  nat       stop                        Remove NAT rules"
+        echo "  nat       status                      Show NAT + routing rule status"
         echo ""
-        echo "  scan [iface]                    Scan networks (auto monitor mode)"
+        echo "  route     status                      Default/management/upstream route table + ip rules"
+        echo ""
+        echo "  drivers   status                      Driver/module/interface summary"
+        echo "  drivers   audit                       Full RTL8812AU driver audit"
+        echo "  drivers   fix rtl8812au [--force]     Fix/reinstall RTL8812AU DKMS driver"
+        echo "  drivers   monitor-test [iface]        Safe monitor mode test (upstream/aux only)"
+        echo "  wifi      doctor                      WiFi interface health check"
+        echo ""
+        echo "  scan [iface]                          Scan networks (auto monitor mode)"
         echo "  identity [status|rotate|restore|list|set <profile>] [--iface <iface>]"
         echo "  pentest  [start|stop|report]"
-        echo "  repair   hostname               Restore configured management hostname"
-        echo "  dashboard                       Print dashboard URL"
-        echo "  update-tools                    Update pentest tools"
-        echo "  doctor                          Diagnose interfaces, services, management protection"
-        echo "  logs                            Live system log stream"
+        echo "  repair   hostname                     Restore configured management hostname"
+        echo "  dashboard                             Print dashboard URL (prefers management IP)"
+        echo "  update-tools                          Update pentest tools"
+        echo "  doctor                                Diagnose interfaces, services, management protection"
+        echo "  logs                                  Live system log stream"
         ;;
     *)
         echo "Unknown command: $cmd  (run 'ghostlink --help')"

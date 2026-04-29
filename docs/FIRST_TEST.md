@@ -73,24 +73,32 @@ ip link show
 
 ---
 
-## C — RTL8812AU Driver (gl-upstream / pentest)
+## C — RTL8812AU Driver Audit (gl-upstream / pentest)
 
 Goal: 88XXau loaded, gl-upstream supports monitor + packet injection.
 
 ```bash
-# 1. Module loaded?
+# 1. Full driver audit (USB detection, module, DKMS, capabilities, conflicts)
+ghostlink drivers audit
+
+# 2. Quick driver status summary
+ghostlink drivers status
+
+# 3. WiFi health check (all 4 interfaces)
+ghostlink wifi doctor
+
+# 4. Manual module check
 lsmod | grep 88XXau
 
-# 2. Manual probe if not loaded
-modprobe 88XXau
-lsmod | grep 88XXau
-
-# 3. Monitor mode capability
+# 5. Monitor mode capability
 phy=$(iw dev gl-upstream info | awk '/wiphy/{print "phy"$2}')
 iw phy "$phy" info | grep -A20 "Supported interface modes"
 # Expect "* monitor" and "* managed" in the list
 
-# 4. Toggle monitor mode
+# 6. Safe monitor mode test (verifies and restores)
+ghostlink drivers monitor-test
+
+# 7. Manual toggle
 ghostlink upstream monitor
 iw dev gl-upstream info          # type should be "monitor"
 
@@ -104,9 +112,17 @@ Troubleshoot if 88XXau not loading:
 ```bash
 cat /etc/modprobe.d/ghostlink-realtek.conf   # blacklist must be present
 lsmod | grep -E "rtl8xxxu|rtw88"             # conflicting in-tree drivers?
+
+# Automated fix:
+ghostlink drivers fix rtl8812au
+
+# Manual fix:
 rmmod rtl8xxxu rtw88_8822bu rtw88_usb rtw88_8812au 2>/dev/null || true
 modprobe 88XXau
 dkms status                                  # check DKMS build status
+
+# Force driver reinstall (even if apparently working):
+ghostlink drivers fix rtl8812au --force
 ```
 
 ---
@@ -275,20 +291,29 @@ Expected: hostapd active on `gl-aux`, hotspot.state shows `HOTSPOT_IFACE=gl-aux`
 
 ---
 
-## J — NAT / Internet Sharing Test
+## J — NAT / Policy Routing / Internet Sharing Test
 
 Prerequisites: Section G (upstream connected) and H or I (hotspot active) complete.
 
 ```bash
-# Verify NAT rules
-ghostlink nat status
-
-# Apply / re-apply if needed
+# Apply / re-apply NAT + policy routing
 ghostlink nat start
 
-# From a client on the hotspot:
-#   ping 8.8.8.8
-#   curl https://ifconfig.me
+# Verify NAT + routing status
+ghostlink nat status
+# Expect: policy routing (ghostlink_upstream table) active, MASQUERADE rule present
+
+# Route table inspection
+ghostlink route status
+# Expect:
+#   ghostlink_upstream table: default via <gw> dev <upstream>
+#   fwmark ip rule: fwmark 0x50 lookup ghostlink_upstream (priority 200)
+#   management route: listed under gl-mgmt interface routes
+#   management NOT a default route
+
+# Verify management SSH is still reachable
+ip -4 addr show gl-mgmt          # must still have IP
+ip route show default            # gl-mgmt must NOT appear here
 
 # Confirm forwarding is on
 sysctl net.ipv4.ip_forward    # expect 1
@@ -296,9 +321,23 @@ sysctl net.ipv4.ip_forward    # expect 1
 # Check iptables chains
 iptables -L GHOSTLINK_FORWARD -v
 iptables -t nat -L GHOSTLINK_NAT -v
+iptables -t mangle -L GHOSTLINK_MANGLE -v   # fwmark 0x50 on hotspot interface
+
+# Check ip rule
+ip rule show | grep fwmark       # fwmark 0x50 lookup ghostlink_upstream
+ip route show table ghostlink_upstream   # default via <upstream_gw>
+
+# From a client on the hotspot:
+#   ping 8.8.8.8
+#   curl https://ifconfig.me
 ```
 
-Expected: Client traffic exits via gl-upstream, client gets internet.
+Expected: Client traffic exits via gl-upstream, client gets internet. Management SSH survives.
+
+Management safety invariant:
+- `gl-mgmt` must never appear in `ip route show default`
+- `GHOSTLINK_FORWARD` must have DROP rules for gl-mgmt in and out
+- SSH to management IP survives upstream connect/disconnect cycles
 
 ---
 
@@ -380,6 +419,8 @@ lsusb | grep -iE "0bda|2357|realtek"
 | gl-aux exists | `ip link show gl-aux` | Interface present |
 | 88XXau loaded | `lsmod \| grep 88XXau` | Module listed |
 | 8188eu loaded | `lsmod \| grep 8188eu` | Module listed |
+| Driver audit | `ghostlink drivers audit` | No conflicts, monitor cap=YES |
+| Monitor mode test | `ghostlink drivers monitor-test` | Passes, restores managed |
 | Monitor mode | `ghostlink upstream monitor` | Returns 0, iw shows monitor |
 | Aux status | `ghostlink aux status` | Monitor=yes, AP=yes |
 | Aux scan | `ghostlink aux scan` | APs visible |
@@ -387,6 +428,10 @@ lsusb | grep -iE "0bda|2357|realtek"
 | Upstream connect | `ghostlink upstream connect SSID PW` | IP assigned |
 | Hotspot start | `ghostlink hotspot start` | hostapd active |
 | Fallback hotspot | disable gl-hotspot + `ghostlink hotspot start` | gl-aux used |
-| NAT | `ghostlink nat status` | MASQUERADE rule present |
+| Policy routing | `ghostlink route status` | ghostlink_upstream table has default route |
+| fwmark rule | `ip rule show \| grep fwmark` | fwmark 0x50 → ghostlink_upstream |
+| NAT | `ghostlink nat status` | MASQUERADE rule present, policy routing active |
+| Mgmt protection | `ghostlink nat status` | management NOT a default route |
 | Client internet | from client: `curl ifconfig.me` | Returns IP |
+| Dashboard URL | `ghostlink dashboard` | Shows management IP |
 | ZRAM | `swapon --show` | /dev/zram0 2G priority=100 |

@@ -77,8 +77,13 @@ Known USB IDs handled by GhostLink udev rules:
 │  gl-hotspot (RTL88x2BU) ← distribution AP (preferred)          │
 │  gl-aux     (RTL8188EUS) ← auxiliary scan / fallback AP         │
 │                                                                 │
-│  NAT: client → gl-hotspot/gl-aux → [MASQUERADE] → gl-upstream  │
-│  iptables named chains (idempotent flush+reapply on restart)    │
+│  NAT + policy routing:                                          │
+│    fwmark 0x50 on hotspot client packets (mangle PREROUTING)    │
+│    ip rule: fwmark 0x50 → ghostlink_upstream table (ID 200)     │
+│    ghostlink_upstream table: default via upstream gateway        │
+│    MASQUERADE on upstream interface                             │
+│    Management (gl-mgmt): never forwarded, never NATed           │
+│  iptables named chains — idempotent flush+reapply on restart    │
 │                                                                 │
 │  HTTPS dashboard → gl-mgmt IP:8080                             │
 │  ghostlink CLI → /usr/local/bin/ghostlink                       │
@@ -114,9 +119,18 @@ ghostlink hotspot start              Start distribution AP
 ghostlink hotspot stop               Stop AP
 ghostlink hotspot status             Show interface and service state
 
-ghostlink nat start                  Apply NAT/forwarding rules
+ghostlink nat start                  Apply NAT + policy routing rules
 ghostlink nat stop                   Remove NAT rules
-ghostlink nat status                 Show NAT rule state
+ghostlink nat status                 Show NAT + routing rule status
+
+ghostlink route status               Default/management/upstream route table + ip rules
+
+ghostlink drivers status             Driver/module/interface summary
+ghostlink drivers audit              Full RTL8812AU driver audit (USB, DKMS, caps, conflicts)
+ghostlink drivers fix rtl8812au      Fix/reinstall RTL8812AU DKMS driver (add --force to reinstall)
+ghostlink drivers monitor-test       Safe monitor mode test — upstream/aux only, restores mode
+
+ghostlink wifi doctor                WiFi interface health check (all 4 roles)
 
 ghostlink scan                       Scan (auto monitor mode on gl-upstream)
 ghostlink identity rotate            Rotate MAC/hostname to random profile
@@ -126,6 +140,7 @@ ghostlink pentest start              Begin automated pentest
 ghostlink doctor                     Diagnose all interfaces and services
 ghostlink logs                       Live log stream
 ghostlink update-tools               Update installed pentest tools
+ghostlink dashboard                  Print dashboard URL (prefers management IP)
 ```
 
 ---
@@ -270,7 +285,10 @@ Ghostlink/
 - [x] RTL8188EUS (gl-aux) support — auxiliary scan + fallback AP
 - [x] Management WiFi protection (never breaks SSH, never default route)
 - [x] gl-upstream state machine (monitor / station / connect)
-- [x] Idempotent NAT (named iptables chains, flush+reapply)
+- [x] Idempotent NAT + policy routing (ghostlink_upstream table, fwmark 0x50)
+- [x] Management-safe forwarding (gl-mgmt never in FORWARD chain)
+- [x] RTL8812AU driver audit, fix, and monitor mode test CLI
+- [x] WiFi health check (ghostlink wifi doctor)
 - [x] Fallback hotspot: gl-aux when gl-hotspot unavailable
 - [x] Raspberry Pi-only 2GB ZRAM (zstd, priority 100)
 - [x] HTTPS dashboard with WebSocket terminal

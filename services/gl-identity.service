@@ -6,7 +6,9 @@ Before=gl-network.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/opt/ghostlink/identity/engine.sh apply
+ExecStart=/opt/ghostlink/identity/engine.sh
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=ghostlink.target

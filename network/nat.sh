@@ -31,7 +31,7 @@ nat_save() {
 }
 
 case "${1:-up}" in
-    up)   nat_up; nat_save ;;
-    down) nat_down ;;
-    *)    echo "Usage: nat.sh {up|down}" ;;
+    up|apply|start)   nat_up; nat_save ;;
+    down|stop|remove) nat_down ;;
+    *)                echo "Usage: nat.sh {up|down}" ;;
 esac

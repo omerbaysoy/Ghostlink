@@ -1,23 +1,27 @@
 [Unit]
 Description=Ghostlink Dashboard
-After=gl-network.service
-Requires=gl-network.service
+After=gl-network.service network.target
+Wants=gl-network.service
 
 [Service]
 Type=simple
-User=ghostlink
-Group=ghostlink
+User=root
 WorkingDirectory=/opt/ghostlink/dashboard
+Environment=PYTHONPATH=/opt/ghostlink
 Environment=GHOSTLINK_CONF=/etc/ghostlink/ghostlink.conf
 ExecStart=/opt/ghostlink/venv/bin/gunicorn \
-    --bind unix:/run/ghostlink/dashboard.sock \
-    --workers 2 \
-    --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker \
+    --bind 0.0.0.0:8080 \
+    --workers 1 \
+    --worker-class gevent \
+    --worker-connections 100 \
+    --timeout 120 \
     --certfile /etc/ghostlink/dashboard.crt \
     --keyfile  /etc/ghostlink/dashboard.key \
     app:app
 Restart=on-failure
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=ghostlink.target

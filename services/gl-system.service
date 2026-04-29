@@ -8,6 +8,8 @@ Type=oneshot
 RemainAfterExit=yes
 ExecStart=/opt/ghostlink/system/ssd.sh apply
 ExecStart=/opt/ghostlink/system/zram.sh apply
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=ghostlink.target

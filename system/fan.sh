@@ -1,10 +1,21 @@
 #!/usr/bin/env bash
 # PWM fan control daemon for Raspberry Pi 5
 # Reads CPU temp from /sys, writes PWM to fan sysfs
+# Exits cleanly on non-RPi5 hardware (no pwm1 sysfs nodes)
 
 TEMP_PATH="/sys/class/thermal/thermal_zone0/temp"
 FAN_PATH="/sys/class/hwmon/hwmon*/pwm1"
 LOG_TAG="gl-fan"
+
+# Guard: exit if there's no PWM fan sysfs node (not RPi5 or no case fan)
+_has_pwm=false
+for _f in /sys/class/hwmon/hwmon*/pwm1_enable; do
+    [[ -f "$_f" ]] && { _has_pwm=true; break; }
+done
+if ! $_has_pwm; then
+    echo "No PWM fan sysfs found — fan daemon not needed on this hardware" >&2
+    exit 0
+fi
 
 temp_c() { awk '{printf "%d", $1/1000}' "$TEMP_PATH"; }
 

@@ -6,14 +6,21 @@ source "$REPO_ROOT/config/sources.conf"
 STATIC_DIR="$GHOSTLINK_DASHBOARD/static"
 mkdir -p "$STATIC_DIR"
 
-# ── Create ghostlink system user ──────────────────────────────────────────────
-# Dashboard runs as root (needs network/iptables access via API)
-# A dedicated user would need sudo rules for every system call — not worth the complexity
+# ── Install full project to /opt/ghostlink ────────────────────────────────────
+# Services reference /opt/ghostlink/identity/, /opt/ghostlink/pentest/, etc.
+# We rsync everything except install/, .git/, __pycache__/, and external/
+gl_step "Installing Ghostlink to $GHOSTLINK_BASE..."
+rsync -a --delete \
+    --exclude='.git/' \
+    --exclude='__pycache__/' \
+    --exclude='external/' \
+    --exclude='install/' \
+    "$REPO_ROOT/." "$GHOSTLINK_BASE/"
 
-# ── Copy dashboard source ─────────────────────────────────────────────────────
-gl_step "Installing dashboard to $GHOSTLINK_DASHBOARD..."
-rsync -a --delete "$REPO_ROOT/dashboard/." "$GHOSTLINK_DASHBOARD/"
-gl_success "Dashboard source installed"
+# Ensure all scripts are executable
+find "$GHOSTLINK_BASE" -name '*.sh' -exec chmod +x {} \;
+chmod +x "$GHOSTLINK_BASE/ghostlink"
+gl_success "Ghostlink installed to $GHOSTLINK_BASE"
 
 # ── Download frontend assets (pinned versions, flat layout) ───────────────────
 # All assets go directly into static/ (not static/js/ or static/css/)
@@ -47,8 +54,7 @@ cp "$REPO_ROOT/config/sources.conf"      /etc/ghostlink/
 cp "$REPO_ROOT/config/ghostlink.conf"    /etc/ghostlink/ 2>/dev/null || true
 
 # ── ghostlink CLI symlink ─────────────────────────────────────────────────────
-chmod +x "$REPO_ROOT/ghostlink"
-ln -sf "$REPO_ROOT/ghostlink" /usr/local/bin/ghostlink
+ln -sf "$GHOSTLINK_BASE/ghostlink" /usr/local/bin/ghostlink
 gl_success "ghostlink CLI available at /usr/local/bin/ghostlink"
 
 # ── Create runtime directories ────────────────────────────────────────────────

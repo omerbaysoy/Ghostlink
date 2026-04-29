@@ -9,7 +9,7 @@ ${GL_PKG_UPDATE:-apt-get update -qq}
 
 # ── Base packages always needed ───────────────────────────────────────────────
 gl_step "Installing base dependencies..."
-BASE_PKGS="curl wget git jq python3 python3-venv build-essential"
+BASE_PKGS="curl wget git jq python3 python3-venv build-essential iw wireless-tools"
 
 # DietPi base (may be missing more than usual)
 if [[ "${GL_OS:-}" == "dietpi" ]]; then

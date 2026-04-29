@@ -57,6 +57,7 @@ daemon() {
 }
 
 install() {
+    mkdir -p /opt/ghostlink/system
     cp "$(realpath "$0")" /opt/ghostlink/system/fan.sh
     chmod +x /opt/ghostlink/system/fan.sh
 }

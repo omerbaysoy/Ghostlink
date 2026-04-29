@@ -586,7 +586,7 @@ sudo ./install/install.sh
     ├── Copy dashboard source → /opt/ghostlink/dashboard/
     ├── Install all systemd services
     ├── systemctl enable + start ghostlink.target
-    ├── ln -s /opt/ghostlink/bin/ghostlink /usr/local/bin/ghostlink
+    ├── ln -sf /opt/ghostlink/ghostlink /usr/local/bin/ghostlink
     └── Display banner + status summary
 ```
 

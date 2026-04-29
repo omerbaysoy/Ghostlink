@@ -8,7 +8,7 @@ mkdir -p "$STATIC_DIR"
 
 # ── Install full project to /opt/ghostlink ────────────────────────────────────
 # Services reference /opt/ghostlink/identity/, /opt/ghostlink/pentest/, etc.
-# We rsync everything except install/, .git/, __pycache__/, and external/
+# We rsync everything except runtime dirs, .git/, __pycache__/, and external/
 gl_step "Installing Ghostlink to $GHOSTLINK_BASE..."
 # Exclude runtime dirs created by earlier install steps so --delete doesn't wipe them.
 # install/ is kept so 'ghostlink update-tools' can re-run 07_tools.sh from the installed copy.

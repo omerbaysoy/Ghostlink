@@ -60,6 +60,9 @@ gl_success "TLS certificate generated (CN=ghostlink, IP=${CERT_IP})"
 cp "$REPO_ROOT/config/sources.conf"      /etc/ghostlink/
 cp "$REPO_ROOT/config/ghostlink.conf"    /etc/ghostlink/ 2>/dev/null || true
 
+# Store OS profile for 'ghostlink version'
+echo "${GL_OS_PROFILE:-${GL_OS:-unknown}}" > /etc/ghostlink/.os_profile
+
 # ── ghostlink CLI symlink ─────────────────────────────────────────────────────
 ln -sf "$GHOSTLINK_BASE/ghostlink" /usr/local/bin/ghostlink
 gl_success "ghostlink CLI available at /usr/local/bin/ghostlink"

@@ -132,14 +132,25 @@ ghostlink drivers monitor-test       Safe monitor mode test — upstream/aux onl
 
 ghostlink wifi doctor                WiFi interface health check (all 4 roles)
 
+ghostlink tools list                 Show all tools with install status
+ghostlink tools info <tool>          Show tool details and example commands
+ghostlink tools run <tool> -- <args> Run tool (native behavior preserved, no --kill)
+ghostlink tools doctor wifite        Check wifite prerequisites
+
 ghostlink scan                       Scan (auto monitor mode on gl-upstream)
+ghostlink scan wifi [args]           Managed wifite launch (management-safe)
+ghostlink pentest wifi [args]        Managed wifite launch (management-safe)
+ghostlink pentest start              Begin automated pentest
 ghostlink identity rotate            Rotate MAC/hostname to random profile
 ghostlink identity set <profile>     Set specific device identity
 ghostlink identity list              List available profiles
-ghostlink pentest start              Begin automated pentest
 ghostlink doctor                     Diagnose all interfaces and services
 ghostlink logs                       Live log stream
-ghostlink update-tools               Update installed pentest tools
+ghostlink update                     Pull and apply latest GhostLink from git
+ghostlink update --dry-run           Preview update without applying
+ghostlink update-tools               Update pentest tools only
+ghostlink version                    Show version, commit, install paths
+ghostlink console                    Interactive command console
 ghostlink dashboard                  Print dashboard URL (prefers management IP)
 ```
 
@@ -293,6 +304,14 @@ Ghostlink/
 - [x] Raspberry Pi-only 2GB ZRAM (zstd, priority 100)
 - [x] HTTPS dashboard with WebSocket terminal
 - [x] Identity rotation (MAC + hostname spoofing)
+- [x] Installed CLI: /usr/local/bin/ghostlink → /opt/ghostlink/ghostlink symlink
+- [x] Self-update: ghostlink update [--dry-run|--force] with backup and git pull
+- [x] ghostlink version: commit, branch, remote, OS profile, last update
+- [x] Tool registry: ghostlink tools list/info/run/doctor with 27 tool definitions
+- [x] Safe wifite wrapper: never uses mgmt/hotspot/trusted-connected interfaces
+- [x] Management-safe capture.py: no airmon-ng check kill, uses iw type instead
+- [x] Tool additions: nmap, arp-scan, netdiscover, iperf3, mtr, traceroute, dnsutils, whois, ethtool, bully
+- [x] ghostlink console: interactive command loop
 - [ ] First real hardware validation on RPi 5
 - [ ] LLM-assisted pentest automation
 - [ ] Evil twin / captive portal

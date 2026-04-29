@@ -23,24 +23,38 @@ export DRY_RUN=false
 export GL_HEADLESS=false
 SKIP_DRIVERS=false
 SKIP_TOOLS=false
+UPDATE_MODE=false
 
 # ── Parse arguments ───────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --os)         OS_OVERRIDE="$2"; shift 2 ;;
-        --dry-run)    DRY_RUN=true; shift ;;
-        --headless)   GL_HEADLESS=true; shift ;;
+        --os)           OS_OVERRIDE="$2"; shift 2 ;;
+        --dry-run)      DRY_RUN=true; shift ;;
+        --headless)     GL_HEADLESS=true; shift ;;
         --skip-drivers) SKIP_DRIVERS=true; shift ;;
         --skip-tools)   SKIP_TOOLS=true; shift ;;
+        --update)       UPDATE_MODE=true; shift ;;
         -h|--help)
-            echo "Usage: sudo $0 [--os <profile>] [--dry-run] [--headless] [--skip-drivers] [--skip-tools]"
+            echo "Usage: sudo $0 [--os <profile>] [--dry-run] [--headless] [--skip-drivers] [--skip-tools] [--update]"
             echo ""
             echo "OS profiles: auto rpi-bookworm rpi-trixie dietpi kali debian ubuntu"
+            echo ""
+            echo "  --update   Run update mode: preserve configs/state, skip re-downloading existing assets"
             exit 0
             ;;
         *) gl_warn "Unknown argument: $1"; shift ;;
     esac
 done
+
+# ── Update mode: delegate to install/update.sh ────────────────────────────────
+if $UPDATE_MODE; then
+    extra_args=()
+    $DRY_RUN        && extra_args+=(--dry-run)
+    $SKIP_DRIVERS   && extra_args+=(--skip-drivers)
+    $SKIP_TOOLS     && extra_args+=(--skip-tools)
+    [[ -n "$OS_OVERRIDE" ]] && extra_args+=(--os "$OS_OVERRIDE")
+    exec bash "$SCRIPT_DIR/update.sh" "${extra_args[@]}"
+fi
 
 # ── Root check ────────────────────────────────────────────────────────────────
 [[ $EUID -ne 0 ]] && { echo "Run as root: sudo $0 $*"; exit 1; }

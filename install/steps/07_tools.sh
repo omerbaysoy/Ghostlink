@@ -49,6 +49,16 @@ declare -A TOOL_MAP=(
     [openssl]=openssl
     [envsubst]=gettext-base
     [jq]=jq
+    # Network discovery and diagnostics
+    [nmap]=nmap
+    [arp-scan]=arp-scan
+    [netdiscover]=netdiscover
+    [iperf3]=iperf3
+    [mtr]=mtr
+    [traceroute]=traceroute
+    [dig]=dnsutils
+    [whois]=whois
+    [ethtool]=ethtool
 )
 
 # Kali native tools: verify presence without installing (they come with Kali)
@@ -78,6 +88,17 @@ for binary in "${!TOOL_MAP[@]}"; do
 done
 
 gl_success "APT tools: $missing_count package(s) installed"
+
+# ── bully (optional WPS tool) ─────────────────────────────────────────────────
+gl_step "Checking bully (optional WPS tool)..."
+if tool_exists bully; then
+    gl_info "bully already present — skipping"
+elif apt-cache show bully &>/dev/null 2>&1; then
+    # shellcheck disable=SC2086
+    $PKG_INSTALL bully && gl_success "bully installed" || gl_warn "bully install failed (optional)"
+else
+    gl_warn "bully not available in apt on this OS — skipping (optional WPS tool)"
+fi
 
 # ── wifite2 (git install) ─────────────────────────────────────────────────────
 gl_step "Setting up wifite2..."

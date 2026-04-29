@@ -408,6 +408,37 @@ lsusb | grep -iE "0bda|2357|realtek"
 
 ---
 
+## M — Tool Registry and Update
+
+Goal: Tool registry shows installed/missing tools; update works.
+
+```bash
+# List all tools with status
+ghostlink tools list
+
+# Inspect specific tools
+ghostlink tools info nmap
+ghostlink tools info wifite
+ghostlink tools info bully
+
+# Check wifite prerequisites
+ghostlink tools doctor wifite
+
+# Version and install info
+ghostlink version
+
+# Dry-run update (verify git + config, no changes)
+ghostlink update --dry-run
+```
+
+Expected:
+- `ghostlink tools list` shows installed/missing for all 27 tools
+- `ghostlink tools doctor wifite` passes when all prerequisites are installed
+- `ghostlink version` shows git commit, branch, and management IP symlink
+- `ghostlink update --dry-run` shows what would be updated without making changes
+
+---
+
 ## Quick Pass / Fail Summary
 
 | Test | Command | Pass criteria |
@@ -435,3 +466,7 @@ lsusb | grep -iE "0bda|2357|realtek"
 | Client internet | from client: `curl ifconfig.me` | Returns IP |
 | Dashboard URL | `ghostlink dashboard` | Shows management IP |
 | ZRAM | `swapon --show` | /dev/zram0 2G priority=100 |
+| Tool registry | `ghostlink tools list` | Shows installed/missing |
+| Wifite prereqs | `ghostlink tools doctor wifite` | All prereqs present |
+| Version | `ghostlink version` | Shows commit, branch, remote |
+| Update dry-run | `ghostlink update --dry-run` | Shows plan, no changes |

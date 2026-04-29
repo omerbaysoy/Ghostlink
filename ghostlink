@@ -2,7 +2,7 @@
 # Ghostlink CLI entry point
 
 CONF="/etc/ghostlink/ghostlink.conf"
-REPO="/opt/ghostlink"
+REPO="${GHOSTLINK_BASE:-/opt/ghostlink}"
 
 source "$REPO/system/banner.sh" 2>/dev/null || true
 
@@ -195,15 +195,31 @@ case "$cmd" in
         ;;
 
     scan)
-        iface="${1:-gl-upstream}"
-        shift || true
-        # Fix: read uppercase MODE= key from upstream.state
-        current_mode=$(grep -i '^MODE=' /var/lib/ghostlink/upstream.state 2>/dev/null | cut -d= -f2 | tr '[:upper:]' '[:lower:]' || echo "")
-        if [[ "$current_mode" != "monitor" ]]; then
-            echo "  Switching gl-upstream to monitor mode..."
-            bash "$REPO/network/upstream_mode.sh" monitor
-        fi
-        "$REPO/venv/bin/python3" "$REPO/pentest/scan.py" "$iface" "$@"
+        sub="${1:-}"; shift || true
+        case "$sub" in
+            wifi|wifite)
+                bash "$REPO/pentest/wifite_wrapper.sh" "$@"
+                ;;
+            ""|gl-*)
+                iface="${sub:-gl-upstream}"
+                # Fix: read uppercase MODE= key from upstream.state
+                current_mode=$(grep -i '^MODE=' /var/lib/ghostlink/upstream.state 2>/dev/null | cut -d= -f2 | tr '[:upper:]' '[:lower:]' || echo "")
+                if [[ "$current_mode" != "monitor" ]]; then
+                    echo "  Switching gl-upstream to monitor mode..."
+                    bash "$REPO/network/upstream_mode.sh" monitor
+                fi
+                "$REPO/venv/bin/python3" "$REPO/pentest/scan.py" "$iface" "$@"
+                ;;
+            *)
+                iface="$sub"
+                current_mode=$(grep -i '^MODE=' /var/lib/ghostlink/upstream.state 2>/dev/null | cut -d= -f2 | tr '[:upper:]' '[:lower:]' || echo "")
+                if [[ "$current_mode" != "monitor" ]]; then
+                    echo "  Switching gl-upstream to monitor mode..."
+                    bash "$REPO/network/upstream_mode.sh" monitor
+                fi
+                "$REPO/venv/bin/python3" "$REPO/pentest/scan.py" "$iface" "$@"
+                ;;
+        esac
         ;;
 
     drivers)
@@ -245,8 +261,60 @@ case "$cmd" in
             start)  "$REPO/venv/bin/python3" "$REPO/pentest/engine.py" start "$@" ;;
             stop)   "$REPO/venv/bin/python3" "$REPO/pentest/engine.py" stop ;;
             report) cat "$(ls -t /var/log/ghostlink/reports/*.md 2>/dev/null | head -1)" ;;
-            *)      echo "Usage: ghostlink pentest {start|stop|report}" ;;
+            wifi)   bash "$REPO/pentest/wifite_wrapper.sh" "$@" ;;
+            *)      echo "Usage: ghostlink pentest {start|stop|report|wifi [args]}" ;;
         esac
+        ;;
+
+    tools)
+        bash "$REPO/network/tools_registry.sh" "${@:-list}"
+        ;;
+
+    update)
+        bash "$REPO/install/update.sh" "$@"
+        ;;
+
+    version)
+        echo ""
+        _git_commit=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+        _git_branch=$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+        _git_remote=$(git -C "$REPO" remote get-url origin 2>/dev/null || echo "none")
+        _install_path="$REPO"
+        _conf_path="$CONF"
+        _os_profile=$(cat /etc/ghostlink/.os_profile 2>/dev/null || echo "unknown")
+        _last_update=""
+        if [[ -f /var/lib/ghostlink/update.state ]]; then
+            _last_update=$(grep '^LAST_UPDATE=' /var/lib/ghostlink/update.state | cut -d= -f2 || echo "")
+        fi
+        echo "  GhostLink Version Information"
+        echo "  ──────────────────────────────────────────────────────"
+        echo "  Git commit     : $_git_commit"
+        echo "  Git branch     : $_git_branch"
+        echo "  Git remote     : $_git_remote"
+        echo "  Install path   : $_install_path"
+        echo "  Config path    : /etc/ghostlink/ghostlink.conf"
+        echo "  OS profile     : ${_os_profile:-unknown}"
+        echo "  Last update    : ${_last_update:-(no update recorded)}"
+        echo "  Symlink        : $(readlink -f /usr/local/bin/ghostlink 2>/dev/null || echo 'not installed')"
+        echo ""
+        ;;
+
+    console)
+        # Interactive GhostLink console
+        bash "$REPO/system/banner.sh" 2>/dev/null || echo "  GhostLink Console"
+        echo "  Type a command (without 'ghostlink'), or 'exit' to quit."
+        echo "  Commands: status, doctor, interfaces, interfaces roles, tools, dashboard, exit"
+        echo ""
+        while true; do
+            printf "ghostlink> "
+            read -r _con_input || break
+            [[ -z "$_con_input" ]] && continue
+            [[ "$_con_input" == "exit" || "$_con_input" == "quit" ]] && echo "  Goodbye." && break
+            [[ "$_con_input" == "help" ]] && _con_input="--help"
+            # Re-execute ourselves with the input as arguments
+            bash "$REPO/ghostlink" $_con_input
+            echo ""
+        done
         ;;
 
     dashboard)
@@ -363,16 +431,28 @@ case "$cmd" in
         echo "  drivers   audit                       Full RTL8812AU driver audit"
         echo "  drivers   fix rtl8812au [--force]     Fix/reinstall RTL8812AU DKMS driver"
         echo "  drivers   monitor-test [iface]        Safe monitor mode test (upstream/aux only)"
-        echo "  wifi      doctor                      WiFi interface health check"
+        echo "  wifi      doctor                      WiFi interface health check (all 4 roles)"
         echo ""
-        echo "  scan [iface]                          Scan networks (auto monitor mode)"
+        echo "  tools     list                        Show all tools with install status"
+        echo "  tools     info <tool>                 Show tool details and example commands"
+        echo "  tools     run <tool> -- <args>        Run tool (native behavior preserved)"
+        echo "  tools     doctor wifite               Check wifite prerequisites"
+        echo ""
+        echo "  scan [iface]                          Scan networks (auto monitor mode on gl-upstream)"
+        echo "  scan wifi [args]                      Managed wifite launch (safety checks)"
+        echo "  pentest  wifi [args]                  Managed wifite launch (safety checks)"
+        echo "  pentest  [start|stop|report]          Pentest engine control"
+        echo ""
         echo "  identity [status|rotate|restore|list|set <profile>] [--iface <iface>]"
-        echo "  pentest  [start|stop|report]"
         echo "  repair   hostname                     Restore configured management hostname"
         echo "  dashboard                             Print dashboard URL (prefers management IP)"
-        echo "  update-tools                          Update pentest tools"
-        echo "  doctor                                Diagnose interfaces, services, management protection"
+        echo "  doctor                                Diagnose interfaces, services, drivers"
         echo "  logs                                  Live system log stream"
+        echo ""
+        echo "  update   [--dry-run] [--force]        Pull and apply latest GhostLink"
+        echo "  update-tools                          Update pentest tools only"
+        echo "  version                               Show version, commit, install paths"
+        echo "  console                               Interactive command console"
         ;;
     *)
         echo "Unknown command: $cmd  (run 'ghostlink --help')"

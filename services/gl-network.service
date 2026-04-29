@@ -1,12 +1,13 @@
 [Unit]
 Description=Ghostlink Network Manager
-After=gl-identity.service
+After=gl-identity.service network-pre.target
 Wants=gl-identity.service
+Before=hostapd.service dnsmasq.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/opt/ghostlink/network/setup_mgmt.sh
+ExecStart=/opt/ghostlink/network/mgmt.sh start
 ExecStart=/opt/ghostlink/network/setup_upstream.sh
 ExecStart=/opt/ghostlink/network/setup_hotspot.sh
 ExecStart=/opt/ghostlink/network/nat.sh up

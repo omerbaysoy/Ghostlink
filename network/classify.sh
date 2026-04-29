@@ -1,128 +1,204 @@
 #!/usr/bin/env bash
-# Classifies wireless interfaces by capability and writes udev .link rules.
-# Works on RPi (brcmfmac onboard) and generic Linux (any non-USB = onboard).
-# Usage: classify.sh [--write-udev] [--map-only]
+# Interface role classifier — writes systemd .link files for deterministic naming
+#
+# Strategy (from KROVEX lessons):
+#   - Use driver name to assign roles — more reliable than USB enumeration order
+#     or capability probing. USB adapters may appear as wlan0/wlan1/wlan2 in any
+#     order depending on boot timing; driver names are stable.
+#   - Onboard (brcmfmac)  → gl-mgmt
+#   - RTL8812AU (88XXau)  → gl-upstream
+#   - RTL88x2BU (88x2bu)  → gl-hotspot
+#   - Also write udev rules based on USB ID for adapters not yet loaded at install time
+#
+# Usage: classify.sh [--write-link|--write-udev|--map-only|--json]
 
 set -euo pipefail
 
-WRITE_UDEV=false
-MAP_ONLY=false
-for arg in "$@"; do
-    [[ "$arg" == "--write-udev" ]] && WRITE_UDEV=true
-    [[ "$arg" == "--map-only"   ]] && MAP_ONLY=true
-done
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INVENTORY="$SCRIPT_DIR/hw_inventory.sh"
 
-UDEV_DIR="/etc/systemd/network"
+LINK_DIR="/etc/systemd/network"
+UDEV_DIR="/etc/udev/rules.d"
 MAP_FILE="/var/lib/ghostlink/interfaces.map"
 
-declare -A iface_monitor
-declare -A iface_ap
-declare -A iface_mac
-declare -a onboard_ifaces=()
-declare -a usb_ifaces=()
+WRITE_LINK=false
+WRITE_UDEV=false
+MAP_ONLY=false
+JSON=false
 
-is_usb_iface() {
-    readlink -f /sys/class/net/"$1"/device 2>/dev/null | grep -q "/usb[0-9]"
-}
+for arg in "$@"; do
+    case "$arg" in
+        --write-link)  WRITE_LINK=true ;;
+        --write-udev)  WRITE_UDEV=true ;;
+        --map-only)    MAP_ONLY=true   ;;
+        --json)        JSON=true       ;;
+    esac
+done
 
-collect_interfaces() {
-    local ifaces
-    mapfile -t ifaces < <(iw dev 2>/dev/null | awk '/Interface/{print $2}')
+# ── Collect hardware inventory ──────────────────────────────────────────────
 
-    for iface in "${ifaces[@]}"; do
-        local mac phy
-        mac=$(cat /sys/class/net/"$iface"/address 2>/dev/null) || continue
-        phy=$(iw dev "$iface" info 2>/dev/null | awk '/wiphy/{print "phy"$2}') || continue
+declare -A inv_mac inv_driver inv_type inv_usb_id inv_role
 
-        iface_mac["$iface"]="$mac"
+if [[ -x "$INVENTORY" ]]; then
+    current_iface=""
+    while IFS='=' read -r key val || [[ -n "$key" ]]; do
+        key="${key%$'\n'}"
+        [[ "$key" == "---" ]] && { current_iface=""; continue; }
+        [[ "$key" == "IFACE" ]] && { current_iface="$val"; continue; }
+        [[ -z "$current_iface" ]] && continue
+        case "$key" in
+            MAC)    inv_mac["$current_iface"]="$val"    ;;
+            DRIVER) inv_driver["$current_iface"]="$val" ;;
+            TYPE)   inv_type["$current_iface"]="$val"   ;;
+            USB_ID) inv_usb_id["$current_iface"]="$val" ;;
+            ROLE)   inv_role["$current_iface"]="$val"   ;;
+        esac
+    done < <("$INVENTORY" text 2>/dev/null)
+fi
 
-        local phy_info
-        phy_info=$(iw phy "$phy" info 2>/dev/null)
-        echo "$phy_info" | grep -q "monitor"   && iface_monitor["$iface"]=1 || iface_monitor["$iface"]=0
-        echo "$phy_info" | grep -qE " AP$| AP " && iface_ap["$iface"]=1     || iface_ap["$iface"]=0
+# ── Role assignment ──────────────────────────────────────────────────────────
 
-        # Onboard = not USB (PCIe, SDIO, M.2 — works for RPi BCM and laptop Intel/Realtek)
-        if is_usb_iface "$iface"; then
-            usb_ifaces+=("$iface")
-        else
-            onboard_ifaces+=("$iface")
+mgmt_iface=""
+upstream_iface=""
+hotspot_iface=""
+
+# Prefer driver-detected assignment
+for iface in "${!inv_role[@]}"; do
+    role="${inv_role[$iface]}"
+    case "$role" in
+        gl-mgmt)
+            [[ -z "$mgmt_iface" ]] && mgmt_iface="$iface"
+            ;;
+        gl-upstream)
+            [[ -z "$upstream_iface" ]] && upstream_iface="$iface"
+            ;;
+        gl-hotspot)
+            [[ -z "$hotspot_iface" ]] && hotspot_iface="$iface"
+            ;;
+    esac
+done
+
+# Fallback: if no driver-based assignment found, use USB/onboard type
+if [[ -z "$mgmt_iface" && -z "$upstream_iface" && -z "$hotspot_iface" ]]; then
+    for iface in "${!inv_type[@]}"; do
+        t="${inv_type[$iface]}"
+        if [[ "$t" == "onboard" && -z "$mgmt_iface" ]]; then
+            mgmt_iface="$iface"
+        elif [[ "$t" == "usb" && -z "$upstream_iface" ]]; then
+            upstream_iface="$iface"
+        elif [[ "$t" == "usb" && -z "$hotspot_iface" && "$iface" != "$upstream_iface" ]]; then
+            hotspot_iface="$iface"
         fi
     done
+fi
+
+if $MAP_ONLY; then
+    echo "gl-mgmt=${mgmt_iface:-}"
+    echo "gl-upstream=${upstream_iface:-}"
+    echo "gl-hotspot=${hotspot_iface:-}"
+    exit 0
+fi
+
+if $JSON; then
+    python3 -c "
+import json, sys
+d = {
+  'gl-mgmt':    '${mgmt_iface:-}',
+  'gl-upstream':'${upstream_iface:-}',
+  'gl-hotspot': '${hotspot_iface:-}',
+}
+print(json.dumps(d, indent=2))
+"
+    exit 0
+fi
+
+echo ""
+echo "  Interface role assignment:"
+printf "  %-14s → %-12s  driver=%-12s  mac=%s\n" \
+    "gl-mgmt"    "${mgmt_iface:-NONE}"     "${inv_driver[$mgmt_iface]:-N/A}"    "${inv_mac[$mgmt_iface]:-N/A}"
+printf "  %-14s → %-12s  driver=%-12s  mac=%s\n" \
+    "gl-upstream" "${upstream_iface:-NONE}" "${inv_driver[$upstream_iface]:-N/A}" "${inv_mac[$upstream_iface]:-N/A}"
+printf "  %-14s → %-12s  driver=%-12s  mac=%s\n" \
+    "gl-hotspot"  "${hotspot_iface:-NONE}"  "${inv_driver[$hotspot_iface]:-N/A}"  "${inv_mac[$hotspot_iface]:-N/A}"
+echo ""
+
+# ── Write systemd .link files (driver-based — survive USB re-enumeration) ───
+
+write_link_driver() {
+    local role="$1" driver="$2"
+    [[ -z "$driver" || "$driver" == "unknown" ]] && return
+    mkdir -p "$LINK_DIR"
+    cat > "$LINK_DIR/10-${role}.link" <<EOF
+[Match]
+Driver=${driver}
+
+[Link]
+Name=${role}
+EOF
+    echo "  Wrote: $LINK_DIR/10-${role}.link  (Driver=${driver} → ${role})"
 }
 
-write_link_rule() {
-    local alias="$1" mac="$2"
-    mkdir -p "$UDEV_DIR"
-    cat > "$UDEV_DIR/10-${alias}.link" <<EOF
+# Also write MAC-based .link as fallback (used when adapter is already renamed gl-*)
+write_link_mac() {
+    local role="$1" mac="$2"
+    [[ -z "$mac" || "$mac" == "unknown" ]] && return
+    mkdir -p "$LINK_DIR"
+    cat > "$LINK_DIR/11-${role}-mac.link" <<EOF
 [Match]
 MACAddress=${mac}
 
 [Link]
-Name=${alias}
+Name=${role}
 EOF
-    echo "  Wrote: $UDEV_DIR/10-${alias}.link  ($alias → $mac)"
 }
 
-assign_roles() {
-    local upstream_iface="" hotspot_iface="" mgmt_iface=""
+if $WRITE_LINK; then
+    [[ -n "$mgmt_iface" ]]     && write_link_driver gl-mgmt    "${inv_driver[$mgmt_iface]:-}"
+    [[ -n "$mgmt_iface" ]]     && write_link_mac    gl-mgmt    "${inv_mac[$mgmt_iface]:-}"
+    [[ -n "$upstream_iface" ]] && write_link_driver gl-upstream "${inv_driver[$upstream_iface]:-}"
+    [[ -n "$upstream_iface" ]] && write_link_mac    gl-upstream "${inv_mac[$upstream_iface]:-}"
+    [[ -n "$hotspot_iface" ]]  && write_link_driver gl-hotspot  "${inv_driver[$hotspot_iface]:-}"
+    [[ -n "$hotspot_iface" ]]  && write_link_mac    gl-hotspot  "${inv_mac[$hotspot_iface]:-}"
+fi
 
-    # gl-mgmt: onboard (non-USB) WiFi — works for RPi BCM43455 and laptop Intel/Realtek
-    if [[ ${#onboard_ifaces[@]} -gt 0 ]]; then
-        mgmt_iface="${onboard_ifaces[0]}"
-    fi
+# ── Write udev rules (USB ID-based — active even before driver loads) ────────
+# These cover all known RTL8812AU and RTL88x2BU USB IDs from sources.conf
 
-    # gl-upstream: USB adapter with monitor mode capability
-    for iface in "${usb_ifaces[@]}"; do
-        if [[ "${iface_monitor[$iface]:-0}" -eq 1 ]] && [[ -z "$upstream_iface" ]]; then
-            upstream_iface="$iface"
-        fi
-    done
+write_udev_rules() {
+    mkdir -p "$UDEV_DIR"
+    cat > "$UDEV_DIR/72-ghostlink-wifi.rules" <<'EOF'
+# Ghostlink deterministic WiFi interface naming (USB ID-based)
+# Ensures RTL8812AU → gl-upstream and RTL88x2BU → gl-hotspot
+# regardless of USB enumeration order.
 
-    # gl-hotspot: second USB adapter with AP mode capability
-    for iface in "${usb_ifaces[@]}"; do
-        [[ "$iface" == "$upstream_iface" ]] && continue
-        if [[ "${iface_ap[$iface]:-0}" -eq 1 ]] && [[ -z "$hotspot_iface" ]]; then
-            hotspot_iface="$iface"
-        fi
-    done
+# RTL8812AU — pentest/upstream (aircrack-ng monitor+injection driver)
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="8812", NAME="gl-upstream"
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="881a", NAME="gl-upstream"
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="8811", NAME="gl-upstream"
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="2357", ATTRS{idProduct}=="0101", NAME="gl-upstream"
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="2357", ATTRS{idProduct}=="0103", NAME="gl-upstream"
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="a811", NAME="gl-upstream"
 
-    # Fallback: if no AP-capable second adapter, use any remaining USB
-    if [[ -z "$hotspot_iface" ]]; then
-        for iface in "${usb_ifaces[@]}"; do
-            [[ "$iface" == "$upstream_iface" ]] && continue
-            hotspot_iface="$iface"
-            break
-        done
-    fi
-
-    # Fallback: if no USB adapters at all (e.g., Kali on laptop),
-    # onboard can serve as upstream; mgmt uses ethernet
-    if [[ -z "$upstream_iface" ]] && [[ ${#onboard_ifaces[@]} -gt 0 ]]; then
-        upstream_iface="${onboard_ifaces[0]}"
-        mgmt_iface=""   # Will use ethernet/SSH on existing interface
-    fi
-
-    echo ""
-    echo "  Interface assignment:"
-    printf "  %-14s → %-12s %s\n" "gl-mgmt"    "${mgmt_iface:-NONE}"     "(${iface_mac[$mgmt_iface]:-N/A})"
-    printf "  %-14s → %-12s %s\n" "gl-upstream" "${upstream_iface:-NONE}" "(${iface_mac[$upstream_iface]:-N/A})"
-    printf "  %-14s → %-12s %s\n" "gl-hotspot"  "${hotspot_iface:-NONE}"  "(${iface_mac[$hotspot_iface]:-N/A})"
-    echo ""
-
-    # Save map
-    mkdir -p "$(dirname "$MAP_FILE")"
-    {
-        echo "gl-mgmt=${mgmt_iface:-}"
-        echo "gl-upstream=${upstream_iface:-}"
-        echo "gl-hotspot=${hotspot_iface:-}"
-    } > "$MAP_FILE"
-
-    if $WRITE_UDEV; then
-        [[ -n "$mgmt_iface"     ]] && write_link_rule gl-mgmt     "${iface_mac[$mgmt_iface]}"
-        [[ -n "$upstream_iface" ]] && write_link_rule gl-upstream  "${iface_mac[$upstream_iface]}"
-        [[ -n "$hotspot_iface"  ]] && write_link_rule gl-hotspot   "${iface_mac[$hotspot_iface]}"
-    fi
+# RTL88x2BU — distribution AP (morrownr AP-mode driver)
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="b812", NAME="gl-hotspot"
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="b820", NAME="gl-hotspot"
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="b82c", NAME="gl-hotspot"
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="2001", ATTRS{idProduct}=="331e", NAME="gl-hotspot"
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="c820", NAME="gl-hotspot"
+EOF
+    echo "  Wrote: $UDEV_DIR/72-ghostlink-wifi.rules"
 }
 
-collect_interfaces
-assign_roles
+if $WRITE_UDEV; then
+    write_udev_rules
+fi
+
+# ── Save interface map ────────────────────────────────────────────────────────
+
+mkdir -p "$(dirname "$MAP_FILE")"
+{
+    echo "gl-mgmt=${mgmt_iface:-}"
+    echo "gl-upstream=${upstream_iface:-}"
+    echo "gl-hotspot=${hotspot_iface:-}"
+} > "$MAP_FILE"
+echo "  Saved: $MAP_FILE"

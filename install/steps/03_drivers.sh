@@ -26,6 +26,23 @@ fi
 
 gl_success "Detected chipsets: ${chipsets[*]}"
 
+# ── Realtek driver conflict blacklist ─────────────────────────────────────────
+# CRITICAL (KROVEX lesson): in-tree Realtek drivers (rtl8xxxu, rtw88_*) can
+# shadow our DKMS-built monitor-capable drivers. Blacklist them first.
+write_realtek_blacklist() {
+    cat > /etc/modprobe.d/ghostlink-realtek.conf <<'CONF'
+# Ghostlink Realtek USB WiFi policy
+# Blacklist in-tree drivers that conflict with the monitor-capable DKMS drivers.
+# Prevents rtl8xxxu/rtw88 from shadowing 88XXau (RTL8812AU) and 88x2bu (RTL88x2BU).
+blacklist rtl8xxxu
+blacklist rtw88_8822bu
+blacklist rtw88_usb
+blacklist rtw88_8812au
+CONF
+    gl_success "Realtek conflict blacklist written: /etc/modprobe.d/ghostlink-realtek.conf"
+}
+write_realtek_blacklist
+
 # ── Chipset → module name mapping ─────────────────────────────────────────────
 module_for_chipset() {
     case "$1" in
@@ -121,7 +138,7 @@ build_driver_dkms() {
     # Install headers if not present
     install_headers || return 1
 
-    ${GL_PKG_INSTALL:-apt-get install -y -qq} dkms git
+    ${GL_PKG_INSTALL:-apt-get install -y -qq} dkms git bc libelf-dev
 
     if [[ -d "$dest/.git" ]]; then
         gl_step "Updating existing $name clone..."
@@ -132,6 +149,16 @@ build_driver_dkms() {
         mkdir -p "$GHOSTLINK_DRIVERS"
         gl_step "Cloning $name from $url (branch: $branch)..."
         git clone -q --depth 1 --branch "$branch" "$url" "$dest"
+    fi
+
+    # CRITICAL (KROVEX lesson): RTL8812AU aircrack-ng driver requires an explicit
+    # aarch64/RPi platform flag in the Makefile. Without this the build either
+    # fails or produces a broken module on RPi 5 (aarch64).
+    if [[ "$name" == "rtl8812au" && "$(uname -m)" == "aarch64" && -f "$dest/Makefile" ]]; then
+        gl_step "Applying aarch64 (RPi) Makefile patch for RTL8812AU..."
+        sed -i 's/^CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/' "$dest/Makefile"
+        sed -i 's/^CONFIG_PLATFORM_ARM64_RPI = n/CONFIG_PLATFORM_ARM64_RPI = y/' "$dest/Makefile"
+        gl_success "aarch64 Makefile patch applied"
     fi
 
     local mod_name mod_ver

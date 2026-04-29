@@ -13,6 +13,64 @@ case "$cmd" in
     status)
         bash "$REPO/identity/status.sh"
         ;;
+
+    interfaces)
+        bash "$REPO/network/hw_inventory.sh" text
+        ;;
+
+    mgmt)
+        sub="${1:-status}"; shift || true
+        case "$sub" in
+            status)      bash "$REPO/network/mgmt.sh" status ;;
+            keep)        bash "$REPO/network/mgmt.sh" keep ;;
+            configure)   bash "$REPO/network/mgmt.sh" configure "$@" ;;
+            reconnect)   bash "$REPO/network/mgmt.sh" reconnect ;;
+            start)       bash "$REPO/network/mgmt.sh" start ;;
+            *)           echo "Usage: ghostlink mgmt {status|keep|configure <ssid> [pass]|reconnect}" ;;
+        esac
+        ;;
+
+    upstream)
+        sub="${1:-status}"; shift || true
+        case "$sub" in
+            status)      bash "$REPO/network/upstream_mode.sh" status ;;
+            monitor)     bash "$REPO/network/upstream_mode.sh" monitor ;;
+            station)     bash "$REPO/network/upstream_mode.sh" station ;;
+            managed)     bash "$REPO/network/upstream_mode.sh" station ;;
+            connect)     bash "$REPO/network/upstream_mode.sh" connect "$@" ;;
+            disconnect)  bash "$REPO/network/upstream_mode.sh" disconnect ;;
+            *)           echo "Usage: ghostlink upstream {status|monitor|station|connect <ssid> [pass]|disconnect}" ;;
+        esac
+        ;;
+
+    hotspot)
+        sub="${1:-status}"; shift || true
+        case "$sub" in
+            start|on)    bash "$REPO/network/setup_hotspot.sh" ;;
+            stop|off)    systemctl stop hostapd dnsmasq 2>/dev/null; echo "  [hotspot] stopped" ;;
+            status)
+                echo ""
+                for svc in hostapd dnsmasq; do
+                    state=$(systemctl is-active "$svc" 2>/dev/null || echo "inactive")
+                    echo "  $svc : $state"
+                done
+                echo ""
+                ;;
+            configure)   bash "$REPO/network/setup_hotspot.sh" ;;
+            *)           echo "Usage: ghostlink hotspot {start|stop|status}" ;;
+        esac
+        ;;
+
+    nat)
+        sub="${1:-status}"; shift || true
+        case "$sub" in
+            start|up|on)     bash "$REPO/network/nat.sh" up ;;
+            stop|down|off)   bash "$REPO/network/nat.sh" down ;;
+            status)          bash "$REPO/network/nat.sh" status ;;
+            *)               echo "Usage: ghostlink nat {start|stop|status}" ;;
+        esac
+        ;;
+
     identity)
         sub="${1:-}"; shift || true
         case "$sub" in
@@ -23,9 +81,19 @@ case "$cmd" in
             *)          bash "$REPO/identity/status.sh" ;;
         esac
         ;;
+
     scan)
-        "$REPO/venv/bin/python3" "$REPO/pentest/scan.py" "$@"
+        iface="${1:-gl-upstream}"
+        shift || true
+        # Put upstream into monitor mode if needed, then scan
+        current_mode=$(cat /var/lib/ghostlink/upstream.state 2>/dev/null | grep '^mode=' | cut -d= -f2 || echo "")
+        if [[ "$current_mode" != "monitor" ]]; then
+            echo "  Switching gl-upstream to monitor mode..."
+            bash "$REPO/network/upstream_mode.sh" monitor
+        fi
+        "$REPO/venv/bin/python3" "$REPO/pentest/scan.py" "$iface" "$@"
         ;;
+
     pentest)
         sub="${1:-}"; shift || true
         case "$sub" in
@@ -35,42 +103,85 @@ case "$cmd" in
             *)      echo "Usage: ghostlink pentest {start|stop|report}" ;;
         esac
         ;;
-    hotspot)
-        case "${1:-}" in
-            on)  systemctl start  hostapd dnsmasq ;;
-            off) systemctl stop   hostapd dnsmasq ;;
-            *)   systemctl status hostapd --no-pager ;;
-        esac
-        ;;
+
     dashboard)
         ip="$(hostname -I | awk '{print $1}')"
         echo "Dashboard: https://${ip}:8080"
         ;;
+
     update-tools)
         bash "$REPO/install/steps/07_tools.sh" "$REPO"
         ;;
+
     doctor)
+        echo ""
+        echo "  ── Interfaces ──────────────────────────────────────"
         for iface in gl-mgmt gl-upstream gl-hotspot; do
             state=$(cat /sys/class/net/"$iface"/operstate 2>/dev/null || echo "missing")
-            echo "  $iface : $state"
+            ip=$(ip -4 addr show "$iface" 2>/dev/null | awk '/inet /{split($2,a,"/"); print a[1]; exit}')
+            driver=$(basename "$(readlink -f "/sys/class/net/$iface/device/driver" 2>/dev/null)" 2>/dev/null || echo "n/a")
+            printf "  %-14s  state=%-8s  ip=%-16s  driver=%s\n" "$iface" "$state" "${ip:-none}" "$driver"
         done
-        systemctl is-active ghostlink.target --no-pager || true
+        echo ""
+        echo "  ── Services ─────────────────────────────────────────"
+        for svc in gl-network gl-identity ghostlink hostapd dnsmasq; do
+            state=$(systemctl is-active "$svc" 2>/dev/null || echo "inactive")
+            printf "  %-20s  %s\n" "$svc" "$state"
+        done
+        echo ""
+        echo "  ── Upstream state ───────────────────────────────────"
+        cat /var/lib/ghostlink/upstream.state 2>/dev/null | sed 's/^/  /' || echo "  (no state file)"
+        echo ""
+        echo "  ── NAT ──────────────────────────────────────────────"
+        bash "$REPO/network/nat.sh" status 2>/dev/null || echo "  (nat.sh unavailable)"
+        echo ""
+        echo "  ── Drivers ──────────────────────────────────────────"
+        for mod in 88XXau 88x2bu brcmfmac; do
+            if lsmod 2>/dev/null | grep -q "^${mod}[[:space:]]"; then
+                echo "  $mod : loaded"
+            else
+                echo "  $mod : NOT loaded"
+            fi
+        done
+        echo ""
         ;;
+
     logs)
         journalctl -u 'gl-*' -f --no-pager
         ;;
+
     ""|--help|-h)
-        echo "Usage: ghostlink <command>"
+        echo "Usage: ghostlink <command> [subcommand] [args]"
         echo ""
-        echo "  status                  System overview"
+        echo "  status                          System overview"
+        echo "  interfaces                      Hardware WiFi inventory"
+        echo ""
+        echo "  mgmt   status                   Management WiFi status"
+        echo "  mgmt   keep                     Keep current gl-mgmt connection"
+        echo "  mgmt   configure <ssid> [pass]  Connect gl-mgmt to WiFi"
+        echo "  mgmt   reconnect                Reconnect using saved config"
+        echo ""
+        echo "  upstream  status                gl-upstream current state"
+        echo "  upstream  monitor               Switch to monitor mode"
+        echo "  upstream  station               Switch to managed/station mode"
+        echo "  upstream  connect <ssid> [pass] Connect to upstream WiFi"
+        echo "  upstream  disconnect            Disconnect upstream"
+        echo ""
+        echo "  hotspot   start                 Start distribution AP"
+        echo "  hotspot   stop                  Stop distribution AP"
+        echo "  hotspot   status                Hotspot service status"
+        echo ""
+        echo "  nat       start                 Apply NAT rules"
+        echo "  nat       stop                  Remove NAT rules"
+        echo "  nat       status                Show NAT rule status"
+        echo ""
+        echo "  scan [iface]                    Scan networks (auto monitor mode)"
         echo "  identity [rotate|restore|list|set <profile>]"
-        echo "  scan                    Scan surrounding networks"
-        echo "  pentest [start|stop|report]"
-        echo "  hotspot [on|off]        Control distribution AP"
-        echo "  dashboard               Print dashboard URL"
-        echo "  update-tools            Update all pentest tools"
-        echo "  doctor                  Diagnose interface/service issues"
-        echo "  logs                    Live system log stream"
+        echo "  pentest  [start|stop|report]"
+        echo "  dashboard                       Print dashboard URL"
+        echo "  update-tools                    Update pentest tools"
+        echo "  doctor                          Diagnose interface/service issues"
+        echo "  logs                            Live system log stream"
         ;;
     *)
         echo "Unknown command: $cmd  (run 'ghostlink --help')"

@@ -99,22 +99,22 @@ echo ""
 EXISTING_HS_SSID=$(awk -F'=' '/^\[hotspot\]/{s=1} s && /^ssid=/{print $2; exit}' "$CONF")
 EXISTING_HS_PASS=$(awk -F'=' '/^\[hotspot\]/{s=1} s && /^password=/{print $2; exit}' "$CONF")
 
-if [[ -n "$EXISTING_HS_SSID" && "$EXISTING_HS_SSID" != "GhostNet" && -n "$EXISTING_HS_PASS" && "$EXISTING_HS_PASS" != "changeme" ]]; then
+if [[ -n "$EXISTING_HS_SSID" && "$EXISTING_HS_SSID" != "Ghostlink-AP" && -n "$EXISTING_HS_PASS" && "$EXISTING_HS_PASS" != "ghostlink1234" ]]; then
     gl_info "Hotspot already configured: SSID=$EXISTING_HS_SSID"
     if ! gl_confirm "Reconfigure hotspot?"; then
         hs_ssid="$EXISTING_HS_SSID"
         hs_pass="$EXISTING_HS_PASS"
     else
-        gl_prompt "Hotspot SSID" hs_ssid "GhostNet"
+        gl_prompt "Hotspot SSID" hs_ssid "Ghostlink-AP"
         gl_prompt_secret "Hotspot Password (min 8 chars)" hs_pass
         sed -i "s/^ssid=.*/ssid=${hs_ssid}/" "$CONF"
         sed -i "s/^password=.*/password=${hs_pass}/" "$CONF"
     fi
 else
-    gl_prompt "Hotspot SSID" hs_ssid "GhostNet"
+    gl_prompt "Hotspot SSID" hs_ssid "Ghostlink-AP"
     gl_prompt_secret "Hotspot Password (min 8 chars)" hs_pass
-    sed -i "s/^ssid=GhostNet/ssid=${hs_ssid}/" "$CONF"
-    sed -i "s/^password=changeme/password=${hs_pass}/" "$CONF"
+    sed -i "s/^ssid=Ghostlink-AP/ssid=${hs_ssid}/" "$CONF"
+    sed -i "s/^password=ghostlink1234/password=${hs_pass}/" "$CONF"
 fi
 
 # ── Generate hostapd/dnsmasq configs ──────────────────────────────────────────

@@ -4,16 +4,23 @@
 
 set -euo pipefail
 
-# Resolve REPO relative to this script's location (works from source tree AND /opt/ghostlink)
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# Fall back to /opt/ghostlink if profiles.sh is not found relative to script
 if [[ ! -f "$REPO/identity/profiles.sh" ]]; then
     REPO="/opt/ghostlink"
 fi
 source "$REPO/identity/profiles.sh"
+source "$REPO/identity/mgmt_guard.sh"
 
 IFACE="${1:?Usage: rotate.sh <interface> <profile|random>}"
 TARGET="${2:-random}"
+
+# Management protection: refuse to spoof protected interfaces
+if is_protected_iface "$IFACE"; then
+    echo "  [identity] BLOCKED: $IFACE is a protected management interface" >&2
+    echo "  [identity] MAC spoofing on $IFACE is disabled (protect_gl_mgmt=true)" >&2
+    echo "  [identity] To spoof operational identity, use: rotate.sh gl-upstream random" >&2
+    exit 1
+fi
 
 if [[ "$TARGET" == "random" ]]; then
     PROFILE=$(random_profile)

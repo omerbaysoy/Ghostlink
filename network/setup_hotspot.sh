@@ -71,8 +71,8 @@ if [[ -n "$phy" ]]; then
 fi
 
 # ── Read config ───────────────────────────────────────────────────────────────
-HOTSPOT_SSID=$(ini_get hotspot ssid "GhostNet")
-HOTSPOT_PASS=$(ini_get hotspot password "changeme")
+HOTSPOT_SSID=$(ini_get hotspot ssid "Ghostlink-AP")
+HOTSPOT_PASS=$(ini_get hotspot password "ghostlink1234")
 HOTSPOT_CHAN=$(ini_get hotspot channel "6")
 
 if [[ "${#HOTSPOT_PASS}" -lt 8 ]]; then

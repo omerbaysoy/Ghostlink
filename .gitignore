@@ -1,6 +1,9 @@
 # External projects are reference only — not part of distribution
 external/
 
+# Local tooling state (Codex, editors, etc.)
+.codex
+
 # Runtime state and secrets
 config/ghostlink.conf.local
 *.state

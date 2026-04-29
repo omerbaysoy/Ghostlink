@@ -98,6 +98,10 @@ if [[ -z "$mgmt_iface" && -z "$upstream_iface" && -z "$hotspot_iface" ]]; then
     done
 fi
 
+# Safe accessors — return N/A when iface variable is empty (avoids "bad array subscript")
+role_driver() { local iface="${1:-}"; [[ -z "$iface" ]] && echo "N/A" && return; echo "${inv_driver[$iface]:-N/A}"; }
+role_mac()    { local iface="${1:-}"; [[ -z "$iface" ]] && echo "N/A" && return; echo "${inv_mac[$iface]:-N/A}"; }
+
 if $MAP_ONLY; then
     echo "gl-mgmt=${mgmt_iface:-}"
     echo "gl-upstream=${upstream_iface:-}"
@@ -123,13 +127,13 @@ fi
 echo ""
 echo "  Interface role assignment:"
 printf "  %-14s → %-12s  driver=%-12s  mac=%s\n" \
-    "gl-mgmt"    "${mgmt_iface:-NONE}"     "${inv_driver[$mgmt_iface]:-N/A}"     "${inv_mac[$mgmt_iface]:-N/A}"
+    "gl-mgmt"     "${mgmt_iface:-NONE}"     "$(role_driver "$mgmt_iface")"     "$(role_mac "$mgmt_iface")"
 printf "  %-14s → %-12s  driver=%-12s  mac=%s\n" \
-    "gl-upstream" "${upstream_iface:-NONE}" "${inv_driver[$upstream_iface]:-N/A}" "${inv_mac[$upstream_iface]:-N/A}"
+    "gl-upstream"  "${upstream_iface:-NONE}" "$(role_driver "$upstream_iface")" "$(role_mac "$upstream_iface")"
 printf "  %-14s → %-12s  driver=%-12s  mac=%s\n" \
-    "gl-hotspot"  "${hotspot_iface:-NONE}"  "${inv_driver[$hotspot_iface]:-N/A}"  "${inv_mac[$hotspot_iface]:-N/A}"
+    "gl-hotspot"   "${hotspot_iface:-NONE}"  "$(role_driver "$hotspot_iface")"  "$(role_mac "$hotspot_iface")"
 printf "  %-14s → %-12s  driver=%-12s  mac=%s\n" \
-    "gl-aux"      "${aux_iface:-NONE}"      "${inv_driver[$aux_iface]:-N/A}"      "${inv_mac[$aux_iface]:-N/A}"
+    "gl-aux"       "${aux_iface:-NONE}"      "$(role_driver "$aux_iface")"      "$(role_mac "$aux_iface")"
 echo ""
 
 # ── Write systemd .link files (driver-based — survive USB re-enumeration) ───

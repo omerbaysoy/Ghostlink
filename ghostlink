@@ -158,13 +158,39 @@ case "$cmd" in
 
     identity)
         sub="${1:-}"; shift || true
+        # --iface <iface> selects operational target; default is gl-upstream
+        _id_iface="gl-upstream"
+        if [[ "${1:-}" == "--iface" ]]; then shift; _id_iface="${1:?'--iface requires interface name'}"; shift; fi
         case "$sub" in
-            rotate)     bash "$REPO/identity/rotate.sh"  gl-upstream random ;;
-            restore)    bash "$REPO/identity/restore.sh" gl-upstream ;;
+            rotate)     bash "$REPO/identity/rotate.sh"  "$_id_iface" random ;;
+            restore)    bash "$REPO/identity/restore.sh" "$_id_iface" ;;
             list)       jq -r 'keys[]' /etc/ghostlink/device_profiles.json ;;
-            # Fix: delegate to rotate.sh which generates MAC from profile OUI
-            set)        bash "$REPO/identity/rotate.sh"  gl-upstream "${1:?'profile name required'}" ;;
+            set)        bash "$REPO/identity/rotate.sh"  "$_id_iface" "${1:?'profile name required'}" ;;
+            status)     bash "$REPO/identity/status.sh" ;;
             *)          bash "$REPO/identity/status.sh" ;;
+        esac
+        ;;
+
+    repair)
+        sub="${1:-}"; shift || true
+        case "$sub" in
+            hostname)
+                MGMT_HOSTNAME=$(awk -F'=' '/^\[management\]/{s=1} s && /^hostname=/{print $2; exit}' "$CONF" 2>/dev/null || echo "Ghostlink")
+                MGMT_HOSTNAME="${MGMT_HOSTNAME:-Ghostlink}"
+                PREV_HOSTNAME=$(hostname 2>/dev/null || echo "")
+                echo "  Repairing hostname: $PREV_HOSTNAME → $MGMT_HOSTNAME"
+                hostnamectl set-hostname "$MGMT_HOSTNAME" 2>/dev/null || echo "$MGMT_HOSTNAME" > /etc/hostname
+                if grep -qE '^127\.0\.1\.1' /etc/hosts 2>/dev/null; then
+                    sed -i "s/^127\.0\.1\.1.*/127.0.1.1\t${MGMT_HOSTNAME}/" /etc/hosts
+                else
+                    printf '127.0.1.1\t%s\n' "$MGMT_HOSTNAME" >> /etc/hosts
+                fi
+                echo "  Hostname  : $(hostname)"
+                echo "  /etc/hosts: $(grep '127.0.1.1' /etc/hosts)"
+                ;;
+            *)
+                echo "Usage: ghostlink repair {hostname}"
+                ;;
         esac
         ;;
 
@@ -205,20 +231,32 @@ case "$cmd" in
         echo "  ── Interfaces ──────────────────────────────────────"
         for iface in gl-mgmt gl-upstream gl-hotspot gl-aux; do
             state=$(cat /sys/class/net/"$iface"/operstate 2>/dev/null || echo "missing")
-            ip=$(ip -4 addr show "$iface" 2>/dev/null | awk '/inet /{split($2,a,"/"); print a[1]; exit}')
+            ip4=$(ip -4 addr show "$iface" 2>/dev/null | awk '/inet /{split($2,a,"/"); print a[1]; exit}')
             driver=$(basename "$(readlink -f "/sys/class/net/$iface/device/driver" 2>/dev/null)" 2>/dev/null || echo "n/a")
-            printf "  %-14s  state=%-8s  ip=%-16s  driver=%s\n" "$iface" "$state" "${ip:-none}" "$driver"
+            ssid=$(iwgetid "$iface" -r 2>/dev/null || echo "")
+            printf "  %-14s  state=%-8s  ip=%-16s  driver=%-10s  ssid=%s\n" \
+                "$iface" "$state" "${ip4:-none}" "$driver" "${ssid:-(none)}"
         done
         echo ""
+        echo "  ── Role map (/var/lib/ghostlink/interfaces.map) ─────"
+        if [[ -f /var/lib/ghostlink/interfaces.map ]]; then
+            sed 's/^/  /' /var/lib/ghostlink/interfaces.map
+        else
+            echo "  (not yet generated — run: ghostlink interfaces roles)"
+        fi
+        echo ""
+        echo "  ── Management protection ────────────────────────────"
+        source "$REPO/identity/mgmt_guard.sh" 2>/dev/null || true
+        mgmt_protection_summary 2>/dev/null || echo "  (mgmt_guard.sh unavailable)"
+        echo ""
         echo "  ── Services ─────────────────────────────────────────"
-        # Fix: check ghostlink.target and correct service names, not "ghostlink" (nonexistent)
         for svc in ghostlink.target gl-system gl-network gl-identity gl-dashboard gl-fan hostapd dnsmasq; do
             state=$(systemctl is-active "$svc" 2>/dev/null || echo "inactive")
             printf "  %-24s  %s\n" "$svc" "$state"
         done
         echo ""
         echo "  ── Upstream state ───────────────────────────────────"
-        cat /var/lib/ghostlink/upstream.state 2>/dev/null | sed 's/^/  /' || echo "  (no state file)"
+        sed 's/^/  /' /var/lib/ghostlink/upstream.state 2>/dev/null || echo "  (no state file)"
         echo ""
         echo "  ── NAT ──────────────────────────────────────────────"
         bash "$REPO/network/nat.sh" status 2>/dev/null || echo "  (nat.sh unavailable)"
@@ -273,11 +311,12 @@ case "$cmd" in
         echo "  nat       status                Show NAT rule status"
         echo ""
         echo "  scan [iface]                    Scan networks (auto monitor mode)"
-        echo "  identity [rotate|restore|list|set <profile>]"
+        echo "  identity [status|rotate|restore|list|set <profile>] [--iface <iface>]"
         echo "  pentest  [start|stop|report]"
+        echo "  repair   hostname               Restore configured management hostname"
         echo "  dashboard                       Print dashboard URL"
         echo "  update-tools                    Update pentest tools"
-        echo "  doctor                          Diagnose all interfaces and services"
+        echo "  doctor                          Diagnose interfaces, services, management protection"
         echo "  logs                            Live system log stream"
         ;;
     *)

@@ -4,7 +4,6 @@ REPO_ROOT="${1:?}"
 source "$REPO_ROOT/config/sources.conf"
 
 STATIC_DIR="$GHOSTLINK_DASHBOARD/static"
-mkdir -p "$STATIC_DIR"
 
 # ── Install full project to /opt/ghostlink ────────────────────────────────────
 # Services reference /opt/ghostlink/identity/, /opt/ghostlink/pentest/, etc.
@@ -26,6 +25,9 @@ rsync -a --delete \
 find "$GHOSTLINK_BASE" -name '*.sh' -exec chmod +x {} \;
 chmod +x "$GHOSTLINK_BASE/ghostlink"
 gl_success "Ghostlink installed to $GHOSTLINK_BASE"
+
+# Create static dir after rsync so --delete doesn't wipe it before assets are downloaded
+mkdir -p "$STATIC_DIR"
 
 # ── Download frontend assets (pinned versions, flat layout) ───────────────────
 # All assets go directly into static/ (not static/js/ or static/css/)
